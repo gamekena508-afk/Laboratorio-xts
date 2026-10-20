@@ -1,0 +1,3391 @@
+<!DOCTYPE html>
+<!--
+  CHANGELOG (topo — arquivo compartilhado entre agentes)
+  v2 2026-08-08 (claude/kurt): repaginação de fidelidade à referência do Pai.
+    Só camada visual — nenhuma chamada de API, id, onclick ou fluxo alterado.
+    - hero: wordmark grande com bloom, badge de vidro, aurora atrás do título
+    - fundo: nebulosa em camadas + canvas FX mais presente (ondas com clareira central)
+    - abas: pílulas com contraste real e wrap
+    - vozes (aba Síntese): linhas com chip, nome/duração, waveform e play circular
+    - CTA/cards/scrollbar: peso e definição
+    Backup: .contract-backup/app.html.20260808T122745Z.bak
+  v3 2026-08-08 (codex/max): ajuste cirurgico do glow do titulo e da luminancia do fundo.
+  v4 2026-08-08 (codex/max): reduz glow v3 e corrige luminancia do hero e cards.
+-->
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- O servidor responde sem Cache-Control/ETag/Last-Modified, então o navegador
+         reusava a página antiga por heurística. Isto força buscar sempre a versão nova. -->
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>🎙️ Célia Voice Lab | XTTS v2 Fusion & Biometry</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #060412;
+            --card: rgba(14, 10, 30, 0.7);
+            --border: rgba(255, 255, 255, 0.08);
+            --pink: #e879f9;
+            --pink-glow: rgba(232, 121, 249, 0.2);
+            --purple: #7c3aed;
+            --purple-glow: rgba(124, 58, 237, 0.3);
+            --cyan: #22d3ee;
+            --cyan-glow: rgba(34, 211, 238, 0.2);
+            --text: #f0e6ff;
+            --muted: #9480b8;
+            --r: 20px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { color-scheme: dark; }
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Inputs de arquivo: tema dark + botão estilizado */
+        input[type="file"] {
+            color: var(--muted);
+            font-family: inherit;
+            font-size: 0.85rem;
+        }
+        input[type="file"]::file-selector-button {
+            background: rgba(124, 58, 237, 0.15);
+            border: 1px solid var(--purple);
+            color: #a78bfa;
+            padding: 0.5rem 1rem;
+            border-radius: 10px;
+            font-family: inherit;
+            font-weight: 600;
+            cursor: pointer;
+            margin-right: 1rem;
+            transition: background 0.2s;
+        }
+        input[type="file"]::file-selector-button:hover {
+            background: rgba(124, 58, 237, 0.3);
+        }
+
+        /* Inputs numéricos: spin buttons no tema dark */
+        input[type="number"] {
+            color-scheme: dark;
+        }
+
+        /* Audio controls: usar painel dark nativo */
+        audio { color-scheme: dark; filter: none; }
+
+        /* Blobs animados */
+        .blob {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.15;
+            pointer-events: none;
+            z-index: -1;
+            animation: pulse 10s ease-in-out infinite;
+        }
+        .blob-1 { width: 600px; height: 600px; background: var(--purple); top: -200px; left: -200px; }
+        .blob-2 { width: 500px; height: 500px; background: var(--pink); bottom: -100px; right: -100px; animation-delay: -5s; }
+        @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.15; } 50% { transform: scale(1.1); opacity: 0.25; } }
+
+        /* Grid */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-size: 50px 50px;
+            background-image: linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
+            z-index: -1;
+        }
+
+        header {
+            padding: 2rem 0 1rem;
+            text-align: center;
+        }
+        .badge {
+            display: inline-block;
+            background: rgba(232, 121, 249, 0.1);
+            border: 1px solid var(--pink-glow);
+            color: var(--pink);
+            font-size: 0.7rem;
+            font-weight: 800;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            padding: 0.4rem 1.2rem;
+            border-radius: 100px;
+            margin-bottom: 1rem;
+        }
+        h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--pink), var(--purple), var(--cyan));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -2px;
+        }
+
+        /* Tabs Navigation */
+        .tabs-nav {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+        .tab-btn {
+            background: var(--card);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            padding: 0.8rem 1.5rem;
+            border-radius: 14px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .tab-btn:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+        .tab-btn.active {
+            background: rgba(124, 58, 237, 0.15);
+            border-color: var(--purple);
+            color: #a78bfa;
+            box-shadow: 0 0 20px var(--purple-glow);
+        }
+
+        /* Container & Grid */
+        main {
+            max-width: 1200px;
+            width: 95%;
+            margin: 0 auto 4rem;
+            flex: 1;
+        }
+        .tab-content { display: none; animation: fadeIn 0.4s ease; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .card {
+            background: var(--card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: var(--r);
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        .card-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--muted);
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .card-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+        /* Inputs & Buttons */
+        textarea, input[type="text"], select {
+            width: 100%;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text);
+            padding: 1rem;
+            font-family: inherit;
+            margin-bottom: 1.5rem;
+            transition: border-color 0.3s;
+        }
+        textarea:focus, input:focus { outline: none; border-color: var(--purple); }
+
+        /* Dark theme em selects (fix do dropdown cinza nativo) */
+        select {
+            color-scheme: dark;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path fill='%239480b8' d='M6 8L0 0h12z'/></svg>");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            padding-right: 2.5rem;
+        }
+        select option, select optgroup {
+            background-color: #0e0a1e;
+            color: var(--text);
+        }
+        select optgroup {
+            font-weight: 700;
+            color: var(--pink);
+        }
+        select option:checked,
+        select option:hover {
+            background: linear-gradient(#7c3aed, #7c3aed) !important;
+            color: white !important;
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: 1.2rem;
+            border-radius: 14px;
+            border: none;
+            background: linear-gradient(135deg, var(--purple), var(--pink));
+            color: white;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            box-shadow: 0 8px 25px rgba(124, 58, 237, 0.4);
+        }
+        .btn-primary:hover:not(:disabled) { transform: translateY(-3px); box-shadow: 0 12px 35px rgba(124, 58, 237, 0.5); }
+        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; filter: grayscale(50%); }
+
+        /* Status Bar */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            padding: 0.6rem 1.2rem;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            font-size: 0.8rem;
+            margin-bottom: 2rem;
+            width: fit-content;
+            margin: 0 auto 2rem;
+        }
+        .ping { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; }
+        .ping.online { background: #22c55e; animation: pulse-green 2s infinite; }
+        @keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); } }
+
+        .engine-panel {
+            max-width: 1200px;
+            width: 95%;
+            margin: 0 auto 2rem;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 1rem;
+            align-items: center;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1rem;
+        }
+        .engine-stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            font-size: 0.75rem;
+            color: var(--muted);
+        }
+        .engine-pill {
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 0.35rem 0.7rem;
+            background: rgba(255,255,255,0.03);
+        }
+        .engine-controls {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+        .engine-controls select {
+            width: 90px;
+            margin-bottom: 0;
+            padding: 0.65rem;
+        }
+        .mini-btn {
+            border: 1px solid var(--purple);
+            background: rgba(124,58,237,0.12);
+            color: #a78bfa;
+            border-radius: 10px;
+            padding: 0.7rem 0.9rem;
+            cursor: pointer;
+            font-weight: 700;
+        }
+        .fusion-weight-row {
+            display: grid;
+            grid-template-columns: 1fr minmax(140px, 240px) 48px;
+            gap: 0.75rem;
+            align-items: center;
+            padding: 0.7rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        /* Grid de Vozes */
+        .voice-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+            max-height: 500px;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+        .voice-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+        .voice-card:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.2); }
+        .voice-card.selected { border-color: var(--pink); background: rgba(232, 121, 249, 0.05); box-shadow: 0 0 15px var(--pink-glow); }
+        .voice-tag { font-size: 0.6rem; text-transform: uppercase; font-weight: 800; padding: 0.2rem 0.5rem; border-radius: 4px; margin-bottom: 0.5rem; display: inline-block; }
+        .tag-wav { background: rgba(34, 211, 238, 0.1); color: var(--cyan); }
+        .tag-fused { background: rgba(232, 121, 249, 0.1); color: var(--pink); }
+
+        /* Módulo Biometria */
+        .radar-box {
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px dashed var(--border);
+            border-radius: var(--r);
+            margin-bottom: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+        .radar-scan {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: var(--cyan);
+            box-shadow: 0 0 15px var(--cyan);
+            top: -2px;
+            animation: scan 3s linear infinite;
+            display: none;
+        }
+        @keyframes scan { from { top: 0; } to { top: 100%; } }
+
+        /* Toast */
+        #toast {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: rgba(14, 10, 30, 0.9);
+            border: 1px solid var(--purple);
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            z-index: 1000;
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            backdrop-filter: blur(10px);
+        }
+        #toast.show { transform: translateX(-50%) translateY(0); }
+
+        /* Audio Player Custom */
+        .result-box {
+            display: none;
+            margin-top: 1.5rem;
+            animation: slideUp 0.4s ease;
+        }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        audio { width: 100%; filter: invert(0.9); margin-top: 0.5rem; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+        /* ── Lab de Criação ── */
+        .lab-slider-group {
+            margin-bottom: 2rem;
+        }
+        .lab-slider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.6rem;
+        }
+        .lab-slider-header .param-name {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--muted);
+        }
+        .lab-slider-header .param-value {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--pink);
+            min-width: 80px;
+            text-align: right;
+        }
+        .lab-slider-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.65rem;
+            color: var(--muted);
+            margin-top: 0.4rem;
+        }
+        .lab-slider {
+            width: 100%;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: linear-gradient(to right, var(--cyan), var(--purple), var(--pink));
+            border-radius: 10px;
+            outline: none;
+            cursor: pointer;
+        }
+        .lab-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: white;
+            box-shadow: 0 0 12px var(--pink), 0 2px 8px rgba(0,0,0,0.5);
+            cursor: grab;
+            transition: transform 0.2s;
+        }
+        .lab-slider::-webkit-slider-thumb:active { cursor: grabbing; transform: scale(1.2); }
+        .dna-preview {
+            display: flex;
+            gap: 4px;
+            margin: 1.5rem 0;
+            align-items: flex-end;
+            justify-content: center;
+            height: 60px;
+        }
+        .dna-bar {
+            width: 10px;
+            border-radius: 4px;
+            background: linear-gradient(to top, var(--purple), var(--pink));
+            transition: height 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            min-height: 6px;
+        }
+        .param-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+        @media (max-width: 700px) { .param-grid { grid-template-columns: 1fr; } }
+
+        /* ===== CAMADA VISUAL ===== */
+        #celia-fx { position: fixed; inset: 0; width: 100%; height: 100%;
+                    z-index: -2; pointer-events: none; opacity: 0.55; }
+        h1 { text-shadow: 0 0 60px rgba(168,85,247,0.35); }
+
+        /* Vidro translúcido nos painéis */
+        .card {
+            backdrop-filter: blur(22px) saturate(140%);
+            -webkit-backdrop-filter: blur(22px) saturate(140%);
+            background: linear-gradient(160deg, rgba(24,16,52,0.72), rgba(10,7,24,0.82));
+            border: 1px solid rgba(168,132,255,0.18);
+            box-shadow: 0 18px 50px rgba(0,0,0,0.55),
+                        inset 0 1px 0 rgba(255,255,255,0.06),
+                        inset 0 0 60px rgba(124,58,237,0.05);
+            position: relative; overflow: hidden;
+        }
+        .card::before {
+            content:''; position:absolute; inset:0; border-radius:inherit; padding:1px;
+            background: linear-gradient(140deg, rgba(232,121,249,0.35), transparent 45%,
+                        transparent 60%, rgba(34,211,238,0.25));
+            -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude; pointer-events:none;
+        }
+
+        /* Abas em pílula com anel de luz */
+        .tab-btn { backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+                   border-radius: 999px; }
+        .tab-btn.active { box-shadow: 0 0 0 1px rgba(232,121,249,0.45),
+                          0 8px 28px rgba(124,58,237,0.4); }
+
+        /* CTA principal */
+        .btn-primary {
+            font-size: 1.15rem; letter-spacing: 0.5px; border-radius: 18px;
+            box-shadow: 0 10px 40px rgba(124,58,237,0.45),
+                        0 0 0 1px rgba(232,121,249,0.25) inset;
+            position: relative; overflow: hidden;
+        }
+        .btn-primary::after {
+            content:''; position:absolute; top:0; left:-60%; width:40%; height:100%;
+            background: linear-gradient(100deg, transparent, rgba(255,255,255,0.28), transparent);
+            animation: celia-shimmer 3.4s ease-in-out infinite;
+        }
+        .btn-primary:disabled::after { animation: none; }
+        @keyframes celia-shimmer { 0%,65%{left:-60%} 100%{left:130%} }
+
+        .card-title { letter-spacing: 2.5px; }
+        select, textarea, input[type="text"] { backdrop-filter: blur(10px); }
+        /* Botao play circular (referencia) + mini onda */
+        .play-btn {
+            width: 42px; height: 42px; flex: 0 0 42px; border-radius: 50%;
+            background: linear-gradient(145deg, rgba(124,58,237,0.30), rgba(232,121,249,0.16));
+            border: 1px solid rgba(232,121,249,0.45); color: #f3e8ff; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 0.95rem; line-height: 1; padding-left: 3px;
+            transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+            box-shadow: 0 4px 16px rgba(124,58,237,0.30), inset 0 1px 0 rgba(255,255,255,0.12);
+        }
+        .play-btn:hover { transform: scale(1.09);
+            background: linear-gradient(145deg, rgba(232,121,249,0.42), rgba(124,58,237,0.30));
+            box-shadow: 0 6px 24px rgba(232,121,249,0.50); }
+        .play-btn:active { transform: scale(0.96); }
+        .voice-card .wave-mini {
+            flex: 0 0 46px; height: 20px; margin-right: 10px; opacity: .55;
+            background: repeating-linear-gradient(90deg,
+                rgba(200,160,255,0.85) 0 2px, transparent 2px 5px);
+            -webkit-mask: radial-gradient(ellipse 50% 100% at 50% 50%, #000 40%, transparent 100%);
+                    mask: radial-gradient(ellipse 50% 100% at 50% 50%, #000 40%, transparent 100%);
+        }
+        /* Configurações */
+        .cfg-row { margin-bottom: 1.3rem; }
+        .cfg-lbl { font-size: 0.74rem; color: var(--muted); letter-spacing: 1px;
+                   text-transform: uppercase; margin-bottom: 0.45rem;
+                   display: flex; align-items: center; gap: 0.6rem; }
+        .cfg-lbl code { text-transform: none; letter-spacing: 0; font-size: 0.72rem; }
+        .cfg-row input { width: calc(100% - 52px); display: inline-block; }
+        .cfg-eye { background: rgba(124,58,237,0.15); border: 1px solid var(--border);
+                   border-radius: 10px; width: 44px; height: 42px; cursor: pointer;
+                   margin-left: 6px; vertical-align: top; font-size: 0.95rem; }
+        .cfg-eye:hover { background: rgba(124,58,237,0.32); }
+        .cfg-hint { font-size: 0.7rem; color: var(--muted); margin-top: 0.4rem; opacity: 0.8; }
+
+        /* ==========================================================
+           REPAGINAÇÃO v2 — fidelidade à referência (somente visual)
+           ========================================================== */
+
+        /* Fundo: nebulosa em camadas, vinheta embaixo */
+        body {
+            /* Medido contra a referência: o fundo dela é azul-marinho quase preto
+               (R e G ~0), com violeta concentrado SÓ atrás do título. */
+            background:
+                radial-gradient(620px 215px at 50% 19%, rgba(139,92,246,0.34), transparent 70%),
+                radial-gradient(1000px 360px at 50% 0%, rgba(24,22,84,0.18), transparent 76%),
+                radial-gradient(760px 400px at 8% 96%, rgba(45,24,100,0.20), transparent 76%),
+                radial-gradient(760px 400px at 94% 92%, rgba(34,20,88,0.15), transparent 76%),
+                #02010a;
+            background-attachment: fixed;
+        }
+        body::before { opacity: 0.55; }
+        .blob { opacity: 0.022; filter: blur(150px); }
+        .blob-2 { background: #312e81; }
+        #celia-fx { opacity: 0.92; }
+
+        /* Hero */
+        header { position: relative; padding: 3.2rem 0 1.1rem; }
+        header::before {
+            content: ''; position: absolute; z-index: -1; pointer-events: none;
+            left: 50%; top: 6%; transform: translateX(-50%);
+            width: min(920px, 94vw); height: 330px;
+            background: radial-gradient(closest-side, rgba(147,51,234,0.30), transparent 74%);
+        }
+        .badge {
+            background: rgba(255,255,255,0.045);
+            border: 1px solid rgba(196,160,255,0.30);
+            color: #e8dcff;
+            font-size: 0.66rem; font-weight: 700; letter-spacing: 4px;
+            padding: 0.5rem 1.35rem; margin-bottom: 1.35rem;
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 0 26px rgba(124,58,237,0.28), inset 0 1px 0 rgba(255,255,255,0.09);
+        }
+        h1 {
+            font-size: clamp(2.9rem, 7.2vw, 5.1rem);
+            font-weight: 800; line-height: 1.02; letter-spacing: -3px;
+            background: linear-gradient(97deg, #fbb6fb 0%, #e07dfa 24%, #b366f7 50%, #8355f2 74%, #5d5cf0 100%);
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 70px rgba(192,110,255,0.55);
+            filter: drop-shadow(0 2px 24px rgba(180,100,255,0.62))
+                    drop-shadow(0 0 60px rgba(232,121,249,0.38))
+                    drop-shadow(0 0 120px rgba(124,58,237,0.30));
+        }
+
+        /* Status + painel de engines */
+        .status-bar {
+            border-color: rgba(168,132,255,0.20);
+            box-shadow: 0 8px 26px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06);
+            backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+            margin: 0 auto 2.2rem;
+        }
+        .engine-panel {
+            border-color: rgba(168,132,255,0.18); border-radius: 18px; padding: 1.1rem 1.25rem;
+            background: linear-gradient(150deg, rgba(24,16,52,0.62), rgba(10,7,24,0.76));
+            backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+            box-shadow: 0 16px 40px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+        .engine-pill { border-color: rgba(168,132,255,0.20); background: rgba(255,255,255,0.045); }
+
+        /* Abas em pílula com contraste real */
+        .tabs-nav {
+            flex-wrap: wrap; gap: 0.45rem;
+            max-width: 1280px; width: 96%; margin: 1.6rem auto 2.2rem;
+        }
+        .tab-btn {
+            background: rgba(255,255,255,0.042);
+            border: 1px solid rgba(168,132,255,0.16);
+            color: #b3a2d6; font-size: 0.8rem; padding: 0.58rem 0.85rem; gap: 0.4rem;
+            white-space: nowrap;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+        }
+        .tab-btn:hover {
+            background: rgba(168,132,255,0.12); border-color: rgba(232,121,249,0.34);
+            color: #f0e6ff; transform: translateY(-1px);
+        }
+        .tab-btn.active {
+            background: linear-gradient(135deg, rgba(124,58,237,0.58), rgba(232,121,249,0.36));
+            border-color: rgba(232,121,249,0.55); color: #ffffff;
+            box-shadow: 0 0 0 1px rgba(232,121,249,0.35), 0 10px 30px rgba(124,58,237,0.45);
+        }
+
+        /* Vidro dos painéis */
+        .card {
+            border-color: rgba(168,132,255,0.22);
+            box-shadow: 0 24px 60px rgba(0,0,0,0.60),
+                        inset 0 1px 0 rgba(255,255,255,0.07),
+                        inset 0 0 80px rgba(124,58,237,0.07);
+        }
+        .card-title { color: #c9b4f2; }
+
+        /* CTA */
+        .btn-primary {
+            padding: 1.25rem; font-size: 1.12rem;
+            background: linear-gradient(100deg, #7c3aed 0%, #a855f7 45%, #e879f9 100%);
+            box-shadow: 0 14px 42px rgba(124,58,237,0.55),
+                        0 0 0 1px rgba(232,121,249,0.35) inset;
+        }
+
+        /* Lista de vozes em linha (referência) */
+        .voice-grid.voice-list {
+            display: flex; flex-direction: column; gap: 0.65rem;
+            max-height: 520px; padding-right: 8px;
+        }
+        .voice-list .voice-card {
+            display: flex; align-items: center; gap: 0.85rem;
+            padding: 0.75rem 0.9rem; border-radius: 16px;
+            background: linear-gradient(120deg, rgba(255,255,255,0.055), rgba(255,255,255,0.02));
+        }
+        .voice-list .voice-card:hover { transform: translateX(2px); }
+        .voice-list .voice-tag { margin: 0; flex: 0 0 auto; letter-spacing: 1px; }
+        .voice-list .vc-meta { flex: 1 1 auto; min-width: 0; }
+        .voice-list .vc-name {
+            font-weight: 600; font-size: 0.92rem;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .voice-list .vc-dur { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+        .voice-card .wave-mini {
+            flex: 0 0 auto; display: flex; align-items: center; gap: 2px;
+            height: 22px; margin-right: 4px; opacity: 0.8;
+            background: none; -webkit-mask: none; mask: none;
+        }
+        .voice-card .wave-mini i {
+            width: 2px; border-radius: 2px;
+            background: linear-gradient(180deg, #f0abfc, #7c3aed);
+        }
+        .voice-card.selected .wave-mini { opacity: 1; }
+
+        /* Scrollbar das listas */
+        .voice-grid::-webkit-scrollbar { width: 8px; }
+        .voice-grid::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); border-radius: 99px; }
+        .voice-grid::-webkit-scrollbar-thumb {
+            border-radius: 99px;
+            background: linear-gradient(180deg, rgba(232,121,249,0.55), rgba(124,58,237,0.55));
+        }
+
+        @media (max-width: 760px) {
+            h1 { letter-spacing: -1.5px; }
+            .tabs-nav { justify-content: flex-start; overflow-x: auto; flex-wrap: nowrap; }
+            .tab-btn { flex: 0 0 auto; }
+        }
+
+        /* REPAGINACAO v3 - glow localizado e superficies mais profundas */
+        .blob-1 { opacity: 0.006; }
+
+        header { isolation: isolate; }
+        header::after {
+            content: '';
+            position: absolute;
+            z-index: -1;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 120px;
+            pointer-events: none;
+            background: linear-gradient(90deg,
+                        rgba(0,0,0,0.80) 0%,
+                        rgba(0,0,0,0.72) 30%,
+                        rgba(0,0,0,0.58) 52%,
+                        transparent 72%);
+        }
+
+        #tab-tts > div > .card {
+            background: linear-gradient(100deg,
+                        rgba(14,10,34,0.80) 0%,
+                        rgba(4,3,16,0.97) 82%);
+            box-shadow: 0 24px 60px rgba(0,0,0,0.68),
+                        inset 0 1px 0 rgba(255,255,255,0.055),
+                        inset 0 0 80px rgba(76,48,180,0.045);
+        }
+
+        h1 {
+            position: relative;
+            isolation: isolate;
+            filter: drop-shadow(0 2px 20px rgba(180,100,255,0.56))
+                    drop-shadow(0 0 44px rgba(102,70,243,0.38));
+        }
+        h1::before {
+            content: '';
+            position: absolute;
+            z-index: -1;
+            inset: -0.25em -0.55em -0.45em;
+            pointer-events: none;
+            background: radial-gradient(ellipse at 50% 50%,
+                        rgba(94,44,224,0.52) 0%,
+                        rgba(85,38,190,0.30) 44%,
+                        transparent 76%);
+            filter: blur(26px);
+            opacity: 0.09;
+        }
+
+        /* ==========================================================
+           v4 — correcao dos 9 erros medidos contra a referencia
+           Cada valor abaixo veio de pixel amostrado, nao de olhometro.
+           ========================================================== */
+
+        /* ERRO 1, 2 e 3 — titulo: degrade nos DOIS eixos, comecando branco
+           e terminando em azul de verdade (verde acima do vermelho).
+           Camada de cima em overlay: clareia o topo da letra, escurece a base. */
+        h1 {
+            /* o h1 ocupava a largura toda do bloco, entao o degrade se distribuia
+               na tela inteira e as letras so pegavam a faixa central: nunca
+               chegavam no branco do inicio nem no azul do fim. Encolhendo a caixa
+               ao tamanho do texto, o degrade inteiro cai dentro das letras. */
+            width: fit-content;
+            margin-left: auto; margin-right: auto;
+            background-image:
+                linear-gradient(180deg, #ffffff 0%, #d8cdf0 34%, #6f5ea6 76%, #3b2b69 100%),
+                linear-gradient(97deg, #ffffff 0%, #f7bcfb 15%, #dc92f8 32%,
+                                #a86bf5 55%, #7a6cf2 76%, #4f8ce8 100%);
+            background-blend-mode: overlay, normal;
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent;
+
+            /* ERRO 10 — o contorno escuro da letra.
+               Na referencia a letra e azul sobre fundo QUASE PRETO: ate as
+               contra-formas do a e do b sao pretas. Aqui o glow tinha espalhado
+               tanto que a letra ficava boiando num campo roxo claro, sem recorte.
+               Os dois primeiros drop-shadow sao curtos e escuros: colam um
+               contorno na letra. Os dois ultimos sao o brilho, que fica por fora. */
+            text-shadow: none;
+            filter:
+                drop-shadow(0 0 1.1px rgba(2,1,14,0.98))
+                drop-shadow(0 0 2.2px rgba(2,1,14,0.90))
+                drop-shadow(0 0 4px rgba(3,2,18,0.62))
+                drop-shadow(0 2px 34px rgba(150,90,255,0.20))
+                drop-shadow(0 0 76px rgba(120,60,240,0.16));
+        }
+        /* o glow atras do titulo precisa ser curto: era ele que lavava o fundo */
+        h1::before { opacity: 0.05; inset: -0.12em -0.3em -0.2em; filter: blur(20px); }
+        /* a aurora que eu mesmo criei na v2 continuava acesa por baixo do titulo
+           e era a principal responsavel por lavar o fundo da letra. */
+        header::before {
+            width: min(680px, 80vw); height: 190px; top: 12%;
+            background: radial-gradient(closest-side, rgba(120,60,220,0.13), transparent 76%);
+        }
+        /* a aurora do fundo tambem lavava a area do titulo: na referencia o pixel
+           colado na letra tem lum 6, quase preto. Encolhida e enfraquecida. */
+        body {
+            background-image:
+                radial-gradient(760px 150px at 50% 21%, rgba(139,92,246,0.16), transparent 74%),
+                radial-gradient(1000px 360px at 50% 0%, rgba(24,22,84,0.16), transparent 76%),
+                radial-gradient(760px 400px at 8% 96%, rgba(45,24,100,0.18), transparent 76%),
+                radial-gradient(760px 400px at 94% 92%, rgba(34,20,88,0.14), transparent 76%),
+                linear-gradient(#02010a, #02010a);
+        }
+
+        /* ERRO 4, 5 e 6 — botao: azul profundo -> magenta escuro, borda de luz
+           de 1px, brilho no topo, reflexo embaixo, particulas e +25% de altura. */
+        .btn-primary {
+            padding: 1.55rem 1.2rem;
+            background-image:
+                radial-gradient(1.6px 1.6px at 18% 32%, rgba(255,255,255,.55), transparent),
+                radial-gradient(1.2px 1.2px at 34% 68%, rgba(255,255,255,.40), transparent),
+                radial-gradient(1.4px 1.4px at 57% 26%, rgba(255,255,255,.45), transparent),
+                radial-gradient(1.1px 1.1px at 73% 62%, rgba(255,255,255,.35), transparent),
+                radial-gradient(1.5px 1.5px at 88% 40%, rgba(255,255,255,.50), transparent),
+                linear-gradient(100deg, #2a0eb8 0%, #4014cf 38%, #6414d6 70%, #8a14da 100%);
+            box-shadow:
+                inset 0 0 0 1px rgba(194,147,255,.55),
+                inset 0 1px 0 rgba(255,255,255,.42),
+                0 14px 40px rgba(58,18,190,.55),
+                0 26px 54px -26px rgba(194,147,255,.70);
+        }
+        .btn-primary::before {
+            content: ''; position: absolute; z-index: 1;
+            left: 12%; right: 12%; bottom: -7px; height: 12px;
+            pointer-events: none;
+            background: radial-gradient(ellipse at 50% 0%,
+                        rgba(200,150,255,.55), transparent 72%);
+            filter: blur(4px);
+        }
+        .btn-primary .bolt {
+            width: 1.05em; height: 1.05em; flex: 0 0 auto;
+            fill: #ffffff; filter: drop-shadow(0 0 6px rgba(255,255,255,.5));
+        }
+
+        /* BONUS — a emenda dura: o header::after terminava em corte seco em 120px.
+           Mascara vertical faz ele sumir aos poucos. */
+        header::after {
+            height: 210px;
+            -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 38%, transparent 100%);
+                    mask-image: linear-gradient(180deg, #000 0%, #000 38%, transparent 100%);
+        }
+
+        /* ERRO 8 — waveform da lista: na referencia e discreto, frio e denso,
+           com envelope maior no centro. O nosso era grosso, vivo e aleatorio. */
+        .voice-card .wave-mini {
+            gap: 1px; height: 20px; opacity: .62;
+        }
+        .voice-card .wave-mini i {
+            width: 1.5px;
+            background: linear-gradient(180deg, #9db4e8, #5b52a8);
+        }
+        .voice-card.selected .wave-mini { opacity: .9; }
+
+        /* ERRO 9 — abas: a referencia usa canto arredondado moderado e icones
+           vetoriais consistentes, nao capsula com emoji do sistema. */
+        .tab-btn {
+            border-radius: 12px;
+            font-size: 0.79rem;
+            padding: 0.55rem 0.72rem;
+            gap: 0.34rem;
+            color: #c3b6de;
+        }
+        .tabs-nav { gap: 0.36rem; max-width: 1330px; }
+        .tab-btn .ic {
+            width: 15px; height: 15px; flex: 0 0 auto;
+            fill: currentColor; opacity: .85;
+        }
+        .tab-btn.active .ic { opacity: 1; }
+
+        /* Botao play: na referencia e escuro com anel fino claro,
+           nao preenchido de roxo com glow. */
+        .play-btn {
+            background: rgba(10,7,26,.55);
+            border: 1.5px solid rgba(196,165,255,.62);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+            color: #f3e8ff;
+        }
+        .play-btn:hover {
+            background: rgba(124,58,237,.28);
+            border-color: rgba(232,121,249,.8);
+            box-shadow: 0 4px 18px rgba(124,58,237,.4);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="celia-fx" aria-hidden="true"></canvas>
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+
+    <header>
+        <div class="badge">XTTS v2 • Biometria • Fusão SLERP</div>
+        <h1>Célia Voice Lab</h1>
+            </header>
+
+    <div class="status-bar">
+        <div class="ping" id="status-dot"></div>
+        <span id="status-text">Conectando ao servidor...</span>
+    </div>
+
+    <div class="engine-panel">
+        <div>
+            <div class="engine-stats" id="engine-stats">
+                <span class="engine-pill">Engines: --</span>
+                <span class="engine-pill">VRAM: --</span>
+                <span class="engine-pill">Por engine: --</span>
+            </div>
+            <div id="engine-note" style="font-size: 0.7rem; color: var(--muted); margin-top: 0.6rem;">
+                Mudar a quantidade de engines aplica no proximo reinicio do servidor.
+            </div>
+        </div>
+        <div class="engine-controls">
+            <select id="engine-count-select">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+            </select>
+            <button class="mini-btn" onclick="saveEngineConfig()">Salvar engines</button>
+        </div>
+    </div>
+
+    <div class="tabs-nav">
+        <button class="tab-btn active" onclick="switchTab('tts')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zm7 8a7 7 0 0 1-6 6.93V21h-2v-3.07A7 7 0 0 1 5 11h2a5 5 0 0 0 10 0z"/></svg><span>Síntese</span></button>
+        <button class="tab-btn" onclick="switchTab('create')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.8 9.94l-3.75-3.75zM20.7 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75z"/></svg><span>Lab de Criação</span></button>
+        <button class="tab-btn" onclick="switchTab('youtube')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 8.64 15.27 12 10 15.36zM21.6 7.2a2.5 2.5 0 0 0-1.76-1.77C18.25 5 12 5 12 5s-6.25 0-7.84.43A2.5 2.5 0 0 0 2.4 7.2 26 26 0 0 0 2 12a26 26 0 0 0 .4 4.8 2.5 2.5 0 0 0 1.76 1.77C5.75 19 12 19 12 19s6.25 0 7.84-.43a2.5 2.5 0 0 0 1.76-1.77A26 26 0 0 0 22 12a26 26 0 0 0-.4-4.8z"/></svg><span>Extrator YT</span></button>
+        <button class="tab-btn" onclick="switchTab('ytdownload')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.2l3.6-3.6L17 11l-5 5-5-5 1.4-1.4L12 13.2V3zM5 19h14v2H5z"/></svg><span>Download YT</span></button>
+        <button class="tab-btn" onclick="switchTab('creative')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z"/></svg><span>Sampling Maker</span></button>
+        <button class="tab-btn" onclick="switchTab('restore')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L8 6l4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg><span>Restaurar</span></button>
+        <button class="tab-btn" onclick="switchTab('fusion')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3a5 5 0 0 0 0 10 5 5 0 0 1 0 10h2a5 5 0 0 0 0-10 5 5 0 0 1 0-10zm8 0a5 5 0 0 1 0 10 5 5 0 0 0 0 10h-2a5 5 0 0 1 0-10 5 5 0 0 0 0-10z"/></svg><span>Fusão</span></button>
+        <button class="tab-btn" onclick="switchTab('biometry')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5zm0 5a2.5 2.5 0 0 1 2.5 2.5c0 1.9-2.5 5-2.5 5s-2.5-3.1-2.5-5A2.5 2.5 0 0 1 12 7z"/></svg><span>Biometria</span></button>
+        <button class="tab-btn" onclick="switchTab('library')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h4v16H4zm5 0h3v16H9zm4.6.4 3.3 15.6 2-.4L15.6 4z"/></svg><span>Biblioteca</span></button>
+        <button class="tab-btn" onclick="switchTab('config')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3a5 5 0 0 0-4.6 7L3 16.4V21h4.6l1-1v-2h2v-2h2l1.4-1.4A5 5 0 1 0 14 3zm2 3.2a1.3 1.3 0 1 1 0 2.6 1.3 1.3 0 0 1 0-2.6z"/></svg><span>Configurações</span></button>
+    </div>
+
+    <main>
+        <!-- ABA: SÍNTESE -->
+        <div id="tab-tts" class="tab-content active">
+            <div style="display: grid; grid-template-columns: 1.5fr 1fr; gap: 2rem;">
+                <div class="card">
+                    <div class="card-title">📝 Texto para Voz</div>
+                    <textarea id="tts-text" rows="8" placeholder="Digite o que a IA deve falar..."></textarea>
+                    <div style="display: flex; gap: 1rem;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">IDIOMA</label>
+                            <select id="tts-lang">
+                                <option value="pt">Português (BR)</option>
+                                <option value="en">English (US)</option>
+                                <option value="es">Español</option>
+                                <option value="fr">Français</option>
+                                <option value="de">Deutsch</option>
+                                <option value="it">Italiano</option>
+                                <option value="ja">日本語 (Japanese)</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">PRESET DE VOZ</label>
+                            <select id="tts-preset" title="Controla temperatura, top_k, top_p e penalidade de repeticao">
+                                <option value="controlado" selected>🎯 Controlado — seria, limpa, sem eco</option>
+                                <option value="natural">🌿 Natural — calma, conversa e narracao</option>
+                                <option value="expressivo">🎭 Expressivo — solta, emotiva, cenas</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button id="btn-synthesize" class="btn-primary" onclick="synthesize()">
+                        <svg class="bolt" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12z"/></svg><span>Gerar Áudio</span>
+                    </button>
+                    <div class="result-box" id="tts-result">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--muted); margin-bottom: 0.5rem;">
+                            <span>✨ ÁUDIO GERADO</span>
+                            <span id="tts-time"></span>
+                        </div>
+                        <audio id="audio-player" controls></audio>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">🎭 Voz de Referência</div>
+                    <div id="tts-voice-grid" class="voice-grid voice-list">
+                        <div style="text-align: center; padding: 2rem; color: var(--muted);">Carregando vozes...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ABA: LAB DE CRIAÇÃO -->
+        <div id="tab-create" class="tab-content">
+            <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 2rem;">
+                <!-- Painel de Sliders -->
+                <div class="card">
+                    <div class="card-title">🧬 DNA Vocal — Molde sua Voz</div>
+
+                    <!-- Visualização DNA -->
+                    <div class="dna-preview" id="dna-viz">
+                        <div class="dna-bar" id="dna-0" style="height:30px"></div>
+                        <div class="dna-bar" id="dna-1" style="height:45px"></div>
+                        <div class="dna-bar" id="dna-2" style="height:20px"></div>
+                        <div class="dna-bar" id="dna-3" style="height:50px"></div>
+                        <div class="dna-bar" id="dna-4" style="height:35px"></div>
+                        <div class="dna-bar" id="dna-5" style="height:25px"></div>
+                        <div class="dna-bar" id="dna-6" style="height:55px"></div>
+                        <div class="dna-bar" id="dna-7" style="height:15px"></div>
+                        <div class="dna-bar" id="dna-8" style="height:40px"></div>
+                        <div class="dna-bar" id="dna-9" style="height:30px"></div>
+                    </div>
+
+                    <div class="param-grid">
+                        <!-- Gênero -->
+                        <div class="lab-slider-group">
+                            <div class="lab-slider-header">
+                                <span class="param-name">⚤ Gênero</span>
+                                <span class="param-value" id="val-gender">Neutro</span>
+                            </div>
+                            <input type="range" class="lab-slider" id="sl-gender" min="0" max="100" value="50"
+                                   oninput="updateSlider('gender',this.value)">
+                            <div class="lab-slider-labels"><span>♀ Feminino</span><span>Neutro</span><span>♂ Masculino</span></div>
+                        </div>
+
+                        <!-- Idade -->
+                        <div class="lab-slider-group">
+                            <div class="lab-slider-header">
+                                <span class="param-name">🕰️ Idade</span>
+                                <span class="param-value" id="val-age">Adulto</span>
+                            </div>
+                            <input type="range" class="lab-slider" id="sl-age" min="0" max="100" value="35"
+                                   oninput="updateSlider('age',this.value)">
+                            <div class="lab-slider-labels"><span>🧒 Jovem</span><span>Adulto</span><span>👴 Idoso</span></div>
+                        </div>
+
+                        <!-- Tom -->
+                        <div class="lab-slider-group">
+                            <div class="lab-slider-header">
+                                <span class="param-name">🎵 Tom</span>
+                                <span class="param-value" id="val-pitch">Médio</span>
+                            </div>
+                            <input type="range" class="lab-slider" id="sl-pitch" min="0" max="100" value="50"
+                                   oninput="updateSlider('pitch',this.value)">
+                            <div class="lab-slider-labels"><span>🔊 Agudo/Fino</span><span>Médio</span><span>🔉 Grave</span></div>
+                        </div>
+
+                        <!-- Expressividade -->
+                        <div class="lab-slider-group">
+                            <div class="lab-slider-header">
+                                <span class="param-name">✨ Expressividade</span>
+                                <span class="param-value" id="val-expr">Balanceado</span>
+                            </div>
+                            <input type="range" class="lab-slider" id="sl-expr" min="0" max="100" value="50"
+                                   oninput="updateSlider('expr',this.value)">
+                            <div class="lab-slider-labels"><span>😐 Neutro</span><span>Balanceado</span><span>🎭 Dramático</span></div>
+                        </div>
+
+                        <!-- Velocidade -->
+                        <div class="lab-slider-group">
+                            <div class="lab-slider-header">
+                                <span class="param-name">⚡ Velocidade</span>
+                                <span class="param-value" id="val-speed">Normal</span>
+                            </div>
+                            <input type="range" class="lab-slider" id="sl-speed" min="0" max="100" value="50"
+                                   oninput="updateSlider('speed',this.value)">
+                            <div class="lab-slider-labels"><span>🐢 Lento</span><span>Normal</span><span>🐇 Rápido</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Painel de Configuração e Preview -->
+                <div style="display: flex; flex-direction: column; gap: 2rem;">
+                    <div class="card">
+                        <div class="card-title">🏷️ Identidade da Voz</div>
+                        <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">NOME DA VOZ</label>
+                        <input type="text" id="create-name" placeholder="Ex: Narrador_Grave_Idoso" style="margin-bottom: 1rem;">
+                        <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">TEXTO DE PREVIEW</label>
+                        <textarea id="create-preview-text" rows="3" placeholder="Texto para ouvir a voz criada...">Olá, esta é minha nova voz criada diretamente da matriz neural do XTTS.</textarea>
+                        <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem; margin-top: 0.5rem;">IDIOMA</label>
+                        <select id="create-lang" style="margin-bottom: 1.5rem;">
+                            <option value="pt">Português (BR)</option>
+                            <option value="en">English (US)</option>
+                            <option value="es">Español</option>
+                            <option value="fr">Français</option>
+                            <option value="de">Deutsch</option>
+                            <option value="ja">日本語</option>
+                        </select>
+                        <button id="btn-create-voice" class="btn-primary" onclick="createVoice()">
+                            <span>🧪 Criar e Ouvir Voz</span>
+                        </button>
+                    </div>
+
+                    <!-- Preview + DNA Resumo -->
+                    <div class="card" id="create-result" style="display:none;">
+                        <div class="card-title">🔬 Resultado</div>
+                        <div id="create-dna-summary" style="font-size: 0.75rem; color: var(--muted); margin-bottom: 1rem; line-height: 1.8;"></div>
+                        <audio id="create-audio" controls style="width: 100%; filter: invert(0.9);"></audio>
+                        <button style="margin-top: 1rem; width: 100%; padding: 0.8rem; border-radius: 12px; border: 1px solid var(--purple); background: rgba(124,58,237,0.1); color: #a78bfa; font-weight: 600; cursor: pointer;" onclick="useCreatedVoice()">
+                            ✅ Usar esta voz na Síntese
+                        </button>
+                    </div>
+
+                    <!-- Dicas de uso -->
+                    <div class="card" style="padding: 1.5rem;">
+                        <div class="card-title" style="font-size: 0.65rem;">💡 Como Funciona</div>
+                        <div style="font-size: 0.75rem; color: var(--muted); line-height: 1.8;">
+                            O XTTS v2 representa qualquer voz como um ponto no <b style="color: var(--pink);">espaço vetorial de 512 dimensões</b>. 
+                            Os sliders movem sua voz nesse espaço entre arquétipos matemáticos — 
+                            <b style="color: var(--cyan);">sem precisar de nenhum exemplo de áudio</b>. 
+                            A voz gerada é salva como <code>.pkl</code> e fica disponível na aba Síntese.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ABA: YOUTUBE DOWNLOAD -->
+        <div id="tab-youtube" class="tab-content">
+            <div class="card">
+                <div class="card-title">▶️ Extrator de Voz do YouTube (Silero VAD)</div>
+                <div style="font-size: 0.8rem; color: var(--muted); margin-bottom: 1.5rem; line-height: 1.5;">
+                    Baixe um vídeo, extraia o áudio, remova ruídos e silêncios automaticamente e salve apenas a voz limpa (máximo configurável) para usar como referência no modelo.
+                </div>
+                
+                <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">URL DO VÍDEO NO YOUTUBE</label>
+                <input type="text" id="yt-url" placeholder="https://youtu.be/K8YWOg_fiGk..." style="margin-bottom: 1.5rem;">
+                
+                <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">NOME DA VOZ (Para salvar na biblioteca)</label>
+                <input type="text" id="yt-name" placeholder="Ex: minha_voz" value="minha_voz" style="margin-bottom: 1.5rem;">
+                
+                <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">DURAÇÃO MÁXIMA DA FALA (segundos)</label>
+                <input type="number" id="yt-duration" value="60" min="10" max="120" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 12px; color: var(--text); padding: 1rem; font-family: inherit; margin-bottom: 1.5rem; outline: none; transition: border-color 0.3s;">
+
+                <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">ISOLAR VOZ ESPECÍFICA (Opcional - Requer referência de áudio prévia)</label>
+                <select id="yt-target-voice" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 12px; color: var(--text); padding: 1rem; font-family: inherit; margin-bottom: 1.5rem; outline: none; transition: border-color 0.3s;">
+                    <option value=""> Nenhuma (Extrair qualquer fala humana) </option>
+                </select>
+                
+                <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">RIGIDEZ DO FILTRO DE VOZ (0.50 = Solto, 0.85 = Extremo)</label>
+                <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1.5rem;">
+                    <input type="range" id="yt-similarity" min="50" max="90" value="65" style="flex: 1; accent-color: var(--pink);">
+                    <span id="yt-sim-val" style="font-size: 0.8rem; color: var(--pink); font-weight: 800; min-width: 30px;">0.65</span>
+                </div>
+                <script>
+                    document.getElementById('yt-similarity').oninput = function() {
+                        document.getElementById('yt-sim-val').innerText = (this.value / 100).toFixed(2);
+                    };
+                </script>
+
+                <label style="display:flex; gap:0.6rem; align-items:center; color:var(--muted); font-size:0.8rem; margin-bottom:1.5rem;">
+                    <input type="checkbox" id="yt-separate-audio" style="accent-color: var(--cyan);">
+                    Separar voz/canto e fundo/trilha
+                </label>
+
+                <button id="btn-yt-download" class="btn-primary" onclick="downloadYoutubeVoice()">
+                    <span>📥 Baixar e Extrair Voz</span>
+                </button>
+                <div id="yt-treatment-preview" class="result-box">
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1rem;">
+                        <div>
+                            <div style="font-size:0.7rem; color:var(--cyan); font-weight:800;">Voz / canto</div>
+                            <audio id="yt-voice-preview" controls></audio>
+                        </div>
+                        <div>
+                            <div style="font-size:0.7rem; color:var(--pink); font-weight:800;">Fundo / trilha</div>
+                            <audio id="yt-background-preview" controls></audio>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ABA: DOWNLOAD YT (puro, sem extração de voz) -->
+        <div id="tab-ytdownload" class="tab-content">
+            <div class="card">
+                <div class="card-title">📥 Baixar do YouTube (MP3 / MP4 puro)</div>
+                <div style="font-size: 0.8rem; color: var(--muted); margin-bottom: 1.5rem; line-height: 1.5;">
+                    Download direto, sem rastrear voz, sem VAD, sem mexer no áudio. Vídeo ou áudio limpo do YouTube.
+                </div>
+
+                <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">URL DO VÍDEO NO YOUTUBE</label>
+                <input type="text" id="ytdl-url" placeholder="https://youtu.be/..." style="margin-bottom: 1.5rem;">
+
+                <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">FORMATO</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-bottom: 1.5rem;">
+                    <label class="ytdl-fmt-card" id="ytdl-fmt-mp3-card" style="cursor: pointer; padding: 1rem; border-radius: 12px; border: 2px solid var(--cyan); background: rgba(34,211,238,0.1); display: flex; align-items: center; gap: 0.7rem;">
+                        <input type="radio" name="ytdl-format" value="mp3" id="ytdl-fmt-mp3" checked style="accent-color: var(--cyan);">
+                        <div>
+                            <div style="font-weight: 700; color: var(--cyan);">🎵 MP3</div>
+                            <div style="font-size: 0.7rem; color: var(--muted);">Áudio 192kbps</div>
+                        </div>
+                    </label>
+                    <label class="ytdl-fmt-card" id="ytdl-fmt-mp4-card" style="cursor: pointer; padding: 1rem; border-radius: 12px; border: 2px solid var(--border); background: rgba(255,255,255,0.03); display: flex; align-items: center; gap: 0.7rem;">
+                        <input type="radio" name="ytdl-format" value="mp4" id="ytdl-fmt-mp4" style="accent-color: var(--pink);">
+                        <div>
+                            <div style="font-weight: 700;">🎬 MP4</div>
+                            <div style="font-size: 0.7rem; color: var(--muted);">Vídeo + áudio</div>
+                        </div>
+                    </label>
+                </div>
+
+                <button id="btn-ytdl" class="btn-primary" onclick="downloadYoutubeRaw()">
+                    <span>📥 Baixar</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ABA: CREATIVE SAMPLING MAKER -->
+        <div id="tab-creative" class="tab-content">
+            <div class="card">
+                <div class="card-title">🎛️ Creative Sampling Maker</div>
+                <div style="font-size: 0.8rem; color: var(--muted); margin-bottom: 1.5rem; line-height: 1.6;">
+                    Transformação criativa automática: pega seu áudio e devolve um loop curto com identidade nova,
+                    pronto pra virar sample em uma composição.
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.6rem; margin-bottom: 1.5rem;">
+                    <div style="padding: 0.8rem; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.02);">
+                        <div style="font-size: 0.65rem; color: var(--cyan); font-weight: 800; text-transform: uppercase;">1. Time & Pitch</div>
+                        <div style="font-size: 0.75rem; color: var(--muted); margin-top: 0.4rem;">Tempo −3% a −5% + pitch ±1 semitom</div>
+                    </div>
+                    <div style="padding: 0.8rem; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.02);">
+                        <div style="font-size: 0.65rem; color: var(--pink); font-weight: 800; text-transform: uppercase;">2. EQ Lo-fi</div>
+                        <div style="font-size: 0.75rem; color: var(--muted); margin-top: 0.4rem;">HPF 100Hz + LPF 12kHz</div>
+                    </div>
+                    <div style="padding: 0.8rem; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.02);">
+                        <div style="font-size: 0.65rem; color: #a78bfa; font-weight: 800; text-transform: uppercase;">3. Micro-Loop</div>
+                        <div style="font-size: 0.75rem; color: var(--muted); margin-top: 0.4rem;">5–8s da parte mais alta</div>
+                    </div>
+                    <div style="padding: 0.8rem; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.02);">
+                        <div style="font-size: 0.65rem; color: var(--cyan); font-weight: 800; text-transform: uppercase;">4. Textura</div>
+                        <div style="font-size: 0.75rem; color: var(--muted); margin-top: 0.4rem;">Saturação + Reverb 15%</div>
+                    </div>
+                </div>
+
+                <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">NOME DO SAMPLE (opcional)</label>
+                <input type="text" id="creative-name" placeholder="Ex: lofi_groove_01" style="margin-bottom: 1.5rem;">
+
+                <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">ÁUDIO DE ENTRADA</label>
+                <input type="file" id="creative-file" accept="audio/*,video/*" style="margin-bottom: 1.5rem;">
+
+                <!-- Efeitos de Remix (Sped Up, Nightcore, Slowed+Reverb, etc.) -->
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.6rem;">🔄 EFEITO DE REMIX (opcional, aplicado no final)</label>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.4rem;">
+                        <button type="button" class="remix-pill" data-remix="none" onclick="setRemixEffect('none')"
+                                style="padding: 0.7rem 0.4rem; border-radius: 10px; border: 2px solid var(--cyan); background: rgba(34,211,238,0.12); color: var(--cyan); font-weight: 700; cursor: pointer; transition: all 0.25s; font-family: inherit; font-size: 0.75rem;">
+                            ⚪ Nenhum
+                        </button>
+                        <button type="button" class="remix-pill" data-remix="sped_up" onclick="setRemixEffect('sped_up')"
+                                style="padding: 0.7rem 0.4rem; border-radius: 10px; border: 2px solid var(--border); background: rgba(255,255,255,0.03); color: var(--muted); font-weight: 700; cursor: pointer; transition: all 0.25s; font-family: inherit; font-size: 0.75rem;">
+                            ⏩ Sped Up
+                        </button>
+                        <button type="button" class="remix-pill" data-remix="nightcore" onclick="setRemixEffect('nightcore')"
+                                style="padding: 0.7rem 0.4rem; border-radius: 10px; border: 2px solid var(--border); background: rgba(255,255,255,0.03); color: var(--muted); font-weight: 700; cursor: pointer; transition: all 0.25s; font-family: inherit; font-size: 0.75rem;">
+                            🌙 Nightcore
+                        </button>
+                        <button type="button" class="remix-pill" data-remix="slowed" onclick="setRemixEffect('slowed')"
+                                style="padding: 0.7rem 0.4rem; border-radius: 10px; border: 2px solid var(--border); background: rgba(255,255,255,0.03); color: var(--muted); font-weight: 700; cursor: pointer; transition: all 0.25s; font-family: inherit; font-size: 0.75rem;">
+                            🐢 Slowed
+                        </button>
+                        <button type="button" class="remix-pill" data-remix="slowed_reverb" onclick="setRemixEffect('slowed_reverb')"
+                                style="padding: 0.7rem 0.4rem; border-radius: 10px; border: 2px solid var(--border); background: rgba(255,255,255,0.03); color: var(--muted); font-weight: 700; cursor: pointer; transition: all 0.25s; font-family: inherit; font-size: 0.75rem;">
+                            🌊 Slowed+Reverb
+                        </button>
+                        <button type="button" class="remix-pill" data-remix="chipmunk" onclick="setRemixEffect('chipmunk')"
+                                style="padding: 0.7rem 0.4rem; border-radius: 10px; border: 2px solid var(--border); background: rgba(255,255,255,0.03); color: var(--muted); font-weight: 700; cursor: pointer; transition: all 0.25s; font-family: inherit; font-size: 0.75rem;">
+                            🐿️ Chipmunk
+                        </button>
+                        <button type="button" class="remix-pill" data-remix="demonic" onclick="setRemixEffect('demonic')"
+                                style="padding: 0.7rem 0.4rem; border-radius: 10px; border: 2px solid var(--border); background: rgba(255,255,255,0.03); color: var(--muted); font-weight: 700; cursor: pointer; transition: all 0.25s; font-family: inherit; font-size: 0.75rem;">
+                            👹 Demonic
+                        </button>
+                        <button type="button" class="remix-pill" data-remix="8d" onclick="setRemixEffect('8d')"
+                                style="padding: 0.7rem 0.4rem; border-radius: 10px; border: 2px solid var(--border); background: rgba(255,255,255,0.03); color: var(--muted); font-weight: 700; cursor: pointer; transition: all 0.25s; font-family: inherit; font-size: 0.75rem;">
+                            🎧 8D Audio
+                        </button>
+                        <button type="button" class="remix-pill" data-remix="reverse" onclick="setRemixEffect('reverse')"
+                                style="padding: 0.7rem 0.4rem; border-radius: 10px; border: 2px solid var(--border); background: rgba(255,255,255,0.03); color: var(--muted); font-weight: 700; cursor: pointer; transition: all 0.25s; font-family: inherit; font-size: 0.75rem;">
+                            ◀️ Reverse
+                        </button>
+                        <button type="button" class="remix-pill" data-remix="phonk" onclick="setRemixEffect('phonk')"
+                                style="padding: 0.7rem 0.4rem; border-radius: 10px; border: 2px solid var(--border); background: rgba(255,255,255,0.03); color: var(--muted); font-weight: 700; cursor: pointer; transition: all 0.25s; font-family: inherit; font-size: 0.75rem;">
+                            💜 Phonk Drift
+                        </button>
+                    </div>
+                    <input type="hidden" id="creative-remix-effect" value="none">
+                </div>
+
+                <!-- Mix Layer: 2º áudio opcional pra blend -->
+                <div style="padding: 1rem; border: 1px dashed var(--border); border-radius: 12px; margin-bottom: 1.5rem; background: rgba(255,255,255,0.02);">
+                    <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">🎚️ MISTURAR COM 2º ÁUDIO (opcional)</label>
+                    <input type="file" id="creative-mix-file" accept="audio/*,video/*" style="margin-bottom: 1rem;">
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <span style="font-size: 0.7rem; color: var(--muted); min-width: 70px;">QUANTIDADE</span>
+                        <input type="range" id="creative-mix-amount" min="0" max="100" value="30" style="flex: 1; accent-color: var(--pink);">
+                        <span id="creative-mix-amount-val" style="font-size: 0.85rem; color: var(--pink); font-weight: 800; min-width: 45px; text-align: right;">30%</span>
+                    </div>
+                    <div style="font-size: 0.65rem; color: var(--muted); margin-top: 0.5rem; line-height: 1.4;">
+                        O 2º áudio é misturado no final do pipeline. Se mais curto que o resultado, é tocado em loop.
+                    </div>
+                </div>
+
+                <label style="display:flex; gap:0.6rem; align-items:center; color:var(--muted); font-size:0.8rem; margin-bottom:0.6rem;">
+                    <input type="checkbox" id="creative-save-lib" style="accent-color: var(--cyan);">
+                    Salvar na biblioteca em vez de baixar
+                </label>
+                <label style="display:flex; gap:0.6rem; align-items:center; color:var(--muted); font-size:0.8rem; margin-bottom:1rem;">
+                    <input type="checkbox" id="creative-remove-vocals" style="accent-color: var(--pink);">
+                    🎤❌ Remover voz humana (usa só instrumental / fundo)
+                </label>
+
+                <!-- Seletor de Nível de Poluição -->
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.6rem;">NÍVEL DE POLUIÇÃO</label>
+                    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.4rem;">
+                        <button type="button" class="pollution-pill" data-level="none" onclick="setPollutionLevel('none')"
+                                style="padding: 0.8rem 0.3rem; border-radius: 12px; border: 2px solid var(--cyan); background: rgba(34,211,238,0.12); color: var(--cyan); font-weight: 700; cursor: pointer; transition: all 0.25s; font-family: inherit;">
+                            <div style="font-size: 0.85rem;">✨ Limpo</div>
+                            <div style="font-size: 0.55rem; opacity: 0.8; margin-top: 0.2rem;">Lo-fi normal</div>
+                        </button>
+                        <button type="button" class="pollution-pill" data-level="extreme" onclick="setPollutionLevel('extreme')"
+                                style="padding: 0.8rem 0.3rem; border-radius: 12px; border: 2px solid var(--border); background: rgba(255,255,255,0.03); color: var(--muted); font-weight: 700; cursor: pointer; transition: all 0.25s; font-family: inherit;">
+                            <div style="font-size: 0.85rem;">☢️ Poluição</div>
+                            <div style="font-size: 0.55rem; opacity: 0.8; margin-top: 0.2rem;">Bitcrush + chorus</div>
+                        </button>
+                        <button type="button" class="pollution-pill" data-level="heavy" onclick="setPollutionLevel('heavy')"
+                                style="padding: 0.8rem 0.3rem; border-radius: 12px; border: 2px solid var(--border); background: rgba(255,255,255,0.03); color: var(--muted); font-weight: 700; cursor: pointer; transition: all 0.25s; font-family: inherit;">
+                            <div style="font-size: 0.85rem;">🔥 Mais Poluído</div>
+                            <div style="font-size: 0.55rem; opacity: 0.8; margin-top: 0.2rem;">+ wow sutil</div>
+                        </button>
+                        <button type="button" class="pollution-pill" data-level="savage" onclick="setPollutionLevel('savage')"
+                                style="padding: 0.8rem 0.3rem; border-radius: 12px; border: 2px solid var(--border); background: rgba(255,255,255,0.03); color: var(--muted); font-weight: 700; cursor: pointer; transition: all 0.25s; font-family: inherit;">
+                            <div style="font-size: 0.85rem;">🩸 Mega Poluído</div>
+                            <div style="font-size: 0.55rem; opacity: 0.8; margin-top: 0.2rem;">+ wow perceptível</div>
+                        </button>
+                        <button type="button" class="pollution-pill" data-level="ultra" onclick="setPollutionLevel('ultra')"
+                                style="padding: 0.8rem 0.3rem; border-radius: 12px; border: 2px solid var(--border); background: rgba(255,255,255,0.03); color: var(--muted); font-weight: 700; cursor: pointer; transition: all 0.25s; font-family: inherit;">
+                            <div style="font-size: 0.85rem;">💀 Ultra Poluído</div>
+                            <div style="font-size: 0.55rem; opacity: 0.8; margin-top: 0.2rem;">Fita gasta</div>
+                        </button>
+                    </div>
+                    <input type="hidden" id="creative-pollution-level" value="none">
+                </div>
+
+                <button id="btn-creative" class="btn-primary" onclick="generateCreativeSample()">
+                    <span>🎛️ Gerar Sample Criativo</span>
+                </button>
+
+                <div id="creative-result" class="result-box">
+                    <div style="display:flex; justify-content:space-between; font-size:0.7rem; color:var(--muted); margin-bottom:0.5rem;">
+                        <span>✨ SAMPLE GERADO</span>
+                        <span id="creative-time"></span>
+                    </div>
+                    <audio id="creative-audio" controls style="width:100%;"></audio>
+                    <div id="creative-meta" style="font-size: 0.7rem; color: var(--muted); margin-top: 1rem; line-height: 1.8;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ABA: RESTAURAR (Reverter a poluição) -->
+        <div id="tab-restore" class="tab-content">
+            <div class="card">
+                <div class="card-title">🛠️ Reverter Poluição</div>
+                <div style="font-size: 0.8rem; color: var(--muted); margin-bottom: 1.5rem; line-height: 1.6;">
+                    Anexe um áudio poluído/corrompido e tente recuperá-lo: denoise espectral
+                    + expansão de EQ (devolve graves e agudos) + correções opcionais de pitch/tempo.
+                    <br><b>⚠️ Não recupera 100%</b> — bitcrush, dropouts e ruído têm perda de informação.
+                </div>
+
+                <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">NOME DO ARQUIVO RESTAURADO (opcional)</label>
+                <input type="text" id="restore-name" placeholder="Ex: track_restaurada" style="margin-bottom: 1.5rem;">
+
+                <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">ÁUDIO POLUÍDO</label>
+                <input type="file" id="restore-file" accept="audio/*,video/*" style="margin-bottom: 1.5rem;">
+
+                <!-- Modo Linear (só cortar, sem processar) -->
+                <label id="restore-linear-card" style="display:flex; gap:1rem; align-items:center; padding:1rem; border:2px solid var(--border); border-radius:14px; background:rgba(255,255,255,0.02); margin-bottom:1rem; cursor:pointer; transition:all 0.3s;">
+                    <div style="position:relative; width:48px; height:26px; flex-shrink:0;">
+                        <input type="checkbox" id="restore-linear" style="opacity:0; width:0; height:0;">
+                        <span id="restore-linear-slider" style="position:absolute; inset:0; background:rgba(255,255,255,0.08); border:1px solid var(--border); border-radius:26px; transition:0.3s;"></span>
+                        <span id="restore-linear-knob" style="position:absolute; top:3px; left:3px; width:18px; height:18px; background:var(--muted); border-radius:50%; transition:0.3s;"></span>
+                    </div>
+                    <div style="flex:1;">
+                        <div style="font-weight:700; font-size:0.85rem; color:var(--text);">✂️ Modo Linear (só cortar trecho)</div>
+                        <div style="font-size:0.7rem; color:var(--muted); margin-top:0.3rem;">Pula denoise, EQ, pitch, time. Só extrai o trecho selecionado abaixo.</div>
+                    </div>
+                </label>
+
+                <!-- Recorte de trecho (start/end em segundos) -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-bottom: 1.5rem;">
+                    <div>
+                        <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">INÍCIO (segundos)</label>
+                        <input type="number" id="restore-start" value="0" min="0" step="0.1" placeholder="0">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">FIM (segundos, 0 = até o final)</label>
+                        <input type="number" id="restore-end" value="0" min="0" step="0.1" placeholder="0">
+                    </div>
+                </div>
+
+                <!-- Força do denoise -->
+                <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">FORÇA DO DENOISE (remove chiado/ruído)</label>
+                <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1.5rem;">
+                    <input type="range" id="restore-denoise" min="0" max="100" value="70" style="flex: 1; accent-color: var(--cyan);">
+                    <span id="restore-denoise-val" style="font-size: 0.85rem; color: var(--cyan); font-weight: 800; min-width: 45px; text-align: right;">70%</span>
+                </div>
+
+                <!-- Expansão EQ -->
+                <label style="display:flex; gap:0.6rem; align-items:center; color:var(--muted); font-size:0.8rem; margin-bottom:1.5rem;">
+                    <input type="checkbox" id="restore-eq-expand" checked style="accent-color: var(--pink);">
+                    🎚️ Expandir EQ (devolve graves &lt;200Hz e agudos &gt;4kHz)
+                </label>
+
+                <!-- Correção de Pitch -->
+                <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">CORREÇÃO DE PITCH (use + se o áudio ficou grave / − se ficou agudo)</label>
+                <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1.5rem;">
+                    <input type="range" id="restore-pitch" min="-12" max="12" value="0" step="1" style="flex: 1; accent-color: #a78bfa;">
+                    <span id="restore-pitch-val" style="font-size: 0.85rem; color: #a78bfa; font-weight: 800; min-width: 60px; text-align: right;">0 semitons</span>
+                </div>
+
+                <!-- Correção de Tempo -->
+                <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">CORREÇÃO DE TEMPO (1.0 = sem mudança / &gt;1 = acelera / &lt;1 = desacelera)</label>
+                <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1.5rem;">
+                    <input type="range" id="restore-time" min="50" max="200" value="100" step="1" style="flex: 1; accent-color: #fbbf24;">
+                    <span id="restore-time-val" style="font-size: 0.85rem; color: #fbbf24; font-weight: 800; min-width: 55px; text-align: right;">1.00×</span>
+                </div>
+
+                <label style="display:flex; gap:0.6rem; align-items:center; color:var(--muted); font-size:0.8rem; margin-bottom:1.5rem;">
+                    <input type="checkbox" id="restore-save-lib" style="accent-color: var(--cyan);">
+                    Salvar na biblioteca em vez de baixar
+                </label>
+
+                <button id="btn-restore" class="btn-primary" onclick="restoreAudio()">
+                    <span>🛠️ Restaurar Áudio</span>
+                </button>
+
+                <div id="restore-result" class="result-box">
+                    <div style="display:flex; justify-content:space-between; font-size:0.7rem; color:var(--muted); margin-bottom:0.5rem;">
+                        <span>✨ ÁUDIO RESTAURADO</span>
+                        <span id="restore-time-meta"></span>
+                    </div>
+                    <audio id="restore-audio" controls style="width:100%;"></audio>
+                    <div id="restore-meta" style="font-size: 0.7rem; color: var(--muted); margin-top: 1rem; line-height: 1.8;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ABA: FUSÃO (Placeholder para próxima parte) -->
+        <div id="tab-fusion" class="tab-content">
+            <div class="card">
+                <div class="card-title">🧬 Fusão Neural de Vozes (SLERP + LERP)</div>
+                <div style="margin-bottom: 2rem;">
+                    <div>
+                        <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">VOZES PARA FUSÃO (Selecione 2 ou mais)</label>
+                        <div id="fusion-grid-many" class="voice-grid" style="max-height: 360px;"></div>
+                    </div>
+                </div>
+                <div id="legacy-fusion-pair" style="display: none; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+                    <div>
+                        <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">VOZ A (Base)</label>
+                        <div id="fusion-grid-a" class="voice-grid" style="max-height: 300px;"></div>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">VOZ B (Influência)</label>
+                        <div id="fusion-grid-b" class="voice-grid" style="max-height: 300px;"></div>
+                    </div>
+                </div>
+                <div style="margin-bottom: 2rem; background: rgba(124,58,237,0.1); padding: 1rem; border-radius: 8px; border: 1px dashed var(--purple);">
+                    <div style="font-size: 0.8rem; color: #a78bfa;">
+                        Selecione vozes e gere 5 variações automáticas por rodada, sem ajustar pesos manualmente.
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 1rem; margin-bottom: 1rem;">
+                    <input type="text" id="fusion-name" placeholder="Prefixo da Quimera (ex: VTuber_Celia)" style="margin-bottom: 0;">
+                    <input type="text" id="fusion-phrase" placeholder="Frase de teste para as quimeras..." style="margin-bottom: 0;">
+                </div>
+                <button id="btn-fuse" class="btn-primary" onclick="fuseVoices()">
+                    <span>Gerar 5 Variações</span>
+                </button>
+
+                <div style="margin-top: 3rem;">
+                    <div class="card-title">🧪 Suas Quimeras (Histórico)</div>
+                    <div id="fusion-history-grid" class="voice-grid">
+                        <div style="color: var(--muted); padding: 1rem; font-size: 0.8rem;">Nenhuma fusão gerada ainda.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ABA: BIOMETRIA -->
+        <div id="tab-biometry" class="tab-content">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 2rem;">
+                <!-- Registro -->
+                <div class="card">
+                    <div class="card-title">👤 Registro de Biometria</div>
+                    <div style="font-size: 0.75rem; color: var(--muted); margin-bottom: 1.5rem;">
+                        Cadastre uma impressão vocal (áudio de 10-30s) para identificar ou isolar este locutor futuramente.
+                    </div>
+                    <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">NOME DO USUÁRIO</label>
+                    <input type="text" id="bio-reg-name" placeholder="Ex: Alice_Futuro">
+                    <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">ÁUDIO DE REFERÊNCIA</label>
+                    <input type="file" id="bio-reg-file" accept="audio/*" style="margin-bottom: 1.5rem;">
+                    <button class="btn-primary" onclick="registerBiometry()">
+                        <span>✅ Cadastrar Impressão</span>
+                    </button>
+                    <div style="margin-top: 2rem;">
+                        <div class="card-title" style="font-size: 0.7rem;">Locutores Cadastrados</div>
+                        <div id="bio-user-list" style="display: flex; flex-wrap: wrap; gap: 0.5rem;"></div>
+                    </div>
+                </div>
+
+                <!-- Identificação -->
+                <div class="card">
+                    <div class="card-title">🔍 Identificação em Tempo Real</div>
+                    <div class="radar-box">
+                        <div class="radar-scan" id="radar-line"></div>
+                        <div id="radar-status" style="text-align: center;">
+                            <div style="font-size: 2rem; margin-bottom: 1rem;">🎙️</div>
+                            <div style="font-size: 0.8rem; color: var(--muted);">Envie um áudio para identificar quem fala</div>
+                        </div>
+                    </div>
+                    <input type="file" id="bio-file" style="display: none;" onchange="identifyVoice()">
+                    <button class="btn-primary" onclick="document.getElementById('bio-file').click()">
+                        <span>🔍 Analisar WAV/MP3</span>
+                    </button>
+                    <div id="bio-result" style="margin-top: 1.5rem; display: none;">
+                        <div style="background: rgba(34, 211, 238, 0.1); border: 1px solid var(--cyan); padding: 1rem; border-radius: 12px; text-align: center;">
+                            <div style="font-size: 0.7rem; color: var(--cyan); text-transform: uppercase;">Match Encontrado</div>
+                            <div id="bio-match-name" style="font-size: 1.5rem; font-weight: 800; margin: 0.5rem 0;">NOME</div>
+                            <div id="bio-match-conf" style="font-size: 0.8rem; opacity: 0.8;">Confiança: 98%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Isolador -->
+                <div class="card">
+                    <div class="card-title">🛡️ Isolador de Voz</div>
+                    <div style="font-size: 0.75rem; color: var(--muted); margin-bottom: 1.5rem;">
+                        Extraia apenas a voz de um locutor específico de um áudio misto usando sua impressão vocal.
+                    </div>
+                    
+                    <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">LOCUTOR ALVO (BIOMETRIA)</label>
+                    <select id="iso-user-name" style="margin-bottom: 1rem;">
+                        <option value="">Selecione um locutor...</option>
+                    </select>
+                    
+                    <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">ÁUDIO PARA PROCESSAR</label>
+                    <input type="file" id="iso-file" accept="audio/*" style="margin-bottom: 1rem;">
+                    
+                    <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 0.5rem;">CONFIANÇA DO MATCH (%)</label>
+                    <input type="number" id="iso-confidence" value="90" min="50" max="100" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 12px; color: var(--text); padding: 1rem; font-family: inherit; margin-bottom: 1.5rem; outline: none;">
+                    
+                    <button id="btn-isolate" class="btn-primary" onclick="isolateVoice()">
+                        <span>🚀 Isolar Voz</span>
+                    </button>
+                    
+                    <div id="iso-result" class="result-box">
+                        <div style="font-size: 0.7rem; color: var(--muted); margin-bottom: 0.5rem;">✨ VOZ ISOLADA</div>
+                        <audio id="iso-player" controls></audio>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ABA: BIBLIOTECA -->
+        <div id="tab-library" class="tab-content">
+            <div class="card">
+                <div class="card-title">📚 Gerenciar Acervo</div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem;">
+                    <div>
+                        <div class="card-title" style="font-size: 0.7rem; border: none;">Importar Nova Voz</div>
+                        <div style="border: 2px dashed var(--border); padding: 2rem; border-radius: var(--r); text-align: center;">
+                            <input type="text" id="lib-upload-name" placeholder="Dar um nome (opcional)" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 12px; color: var(--text); padding: 0.8rem; font-family: inherit; margin-bottom: 1rem; outline: none;">
+                            <label style="display:flex; gap:0.6rem; align-items:center; justify-content:center; color:var(--muted); font-size:0.8rem; margin-bottom:1rem;">
+                                <input type="checkbox" id="lib-separate-audio" style="accent-color: var(--cyan);">
+                                Separar voz/canto e fundo/trilha
+                            </label>
+                            <input type="file" id="lib-upload" accept="audio/*,video/*" style="display: none;" onchange="uploadVoice()">
+                            <button class="btn-primary" style="background: var(--card); border: 1px solid var(--border); box-shadow: none;" onclick="document.getElementById('lib-upload').click()">
+                                📁 Selecionar Arquivo
+                            </button>
+                            <p style="font-size: 0.7rem; color: var(--muted); margin-top: 1rem;">Formatos aceitos: MP3, WAV, OGG, MP4, MKV...</p>
+                            <div id="upload-treatment-preview" class="result-box">
+                                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:1rem;">
+                                    <div>
+                                        <div style="font-size:0.7rem; color:var(--cyan); font-weight:800;">Voz / canto</div>
+                                        <audio id="upload-voice-preview" controls></audio>
+                                    </div>
+                                    <div>
+                                        <div style="font-size:0.7rem; color:var(--pink); font-weight:800;">Fundo / trilha</div>
+                                        <audio id="upload-background-preview" controls></audio>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="card-title" style="font-size: 0.7rem; border: none;">Conversor Universal</div>
+                        <input type="text" id="conv-name" placeholder="Nome do arquivo final (opcional)" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 12px; color: var(--text); padding: 0.8rem; font-family: inherit; margin-bottom: 1rem; outline: none;">
+                        <input type="file" id="conv-file" accept="audio/*,video/*">
+                        <label style="display:flex; gap:0.6rem; align-items:center; color:var(--muted); font-size:0.8rem; margin:1rem 0;">
+                            <input type="checkbox" id="conv-separate-audio" style="accent-color: var(--cyan);">
+                            Separar voz/canto e fundo/trilha
+                        </label>
+                        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                            <select id="conv-format" style="margin-bottom: 0;">
+                                <option value="wav">WAV (24kHz Mono)</option>
+                                <option value="mp3">MP3 (High Quality)</option>
+                                <option value="ogg">OGG (Vorbis)</option>
+                            </select>
+                            <select id="conv-speed" style="margin-bottom: 0; width: 100px;">
+                                <option value="1.0">1.0x</option>
+                                <option value="1.2">1.2x</option>
+                                <option value="1.5">1.5x</option>
+                                <option value="0.8">0.8x</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="btn-primary" onclick="convertAudio(false)" style="flex: 1;">
+                                <span>🔄 Baixar</span>
+                            </button>
+                            <button class="btn-primary" onclick="convertAudio(true)" style="flex: 1; background: rgba(124,58,237,0.1); border: 1px solid var(--purple); color: #a78bfa;">
+                                <span>💾 Salvar</span>
+                            </button>
+                        </div>
+                        <div id="library-treatment-preview" class="result-box">
+                            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:1rem;">
+                                <div>
+                                    <div style="font-size:0.7rem; color:var(--cyan); font-weight:800;">Voz / canto</div>
+                                    <audio id="library-voice-preview" controls></audio>
+                                </div>
+                                <div>
+                                    <div style="font-size:0.7rem; color:var(--pink); font-weight:800;">Fundo / trilha</div>
+                                    <audio id="library-background-preview" controls></audio>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="card-title" style="font-size: 0.7rem; border: none;">✂️ Cortador de Áudio Visual</div>
+                        <div style="font-size: 0.75rem; color: var(--muted); margin-bottom: 1rem;">Desenhe na linha do tempo para selecionar a parte que deseja salvar.</div>
+                        <input type="text" id="trim-name" placeholder="Nome final (opcional)" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 12px; color: var(--text); padding: 0.8rem; font-family: inherit; margin-bottom: 1rem; outline: none;">
+                        <input type="file" id="trim-file" accept="audio/*,video/*" style="margin-bottom: 1rem; width: 100%; color: var(--muted);">
+                        
+                        <!-- Timeline Canvas -->
+                        <canvas id="trim-canvas" width="600" height="80" style="width:100%; background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:12px; margin-bottom:0.5rem; cursor: crosshair;"></canvas>
+                        <audio id="trim-audio-player" controls style="width:100%; height:30px; margin-bottom:0.5rem; border-radius:6px; background:transparent;"></audio>
+                        
+                        <div id="trim-display" style="text-align: center; font-size: 0.75rem; font-weight: bold; color: var(--cyan); margin-bottom: 1rem;">
+                            Arraste no gráfico para selecionar uma área
+                        </div>
+
+                        <div style="margin-bottom: 1rem;">
+                            <label style="font-size: 0.6rem; color: var(--muted);">O que fazer com a seleção em azul?</label>
+                            <select id="trim-action" style="width: 100%; margin-bottom: 0;">
+                                <option value="keep">✅ EXTRAIR (Manter apenas a seleção azul e deletar o resto)</option>
+                                <option value="remove">❌ DELETAR (Apagar a seleção azul e manter o resto)</option>
+                            </select>
+                        </div>
+                        <div style="margin-bottom: 1rem;">
+                            <label style="font-size: 0.7rem; color: var(--text); display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="trim-vad" style="accent-color: var(--cyan);" checked> 
+                                🎙️ Limpar Silêncios e Ruídos (Silero VAD)
+                            </label>
+                        </div>
+                        <button class="btn-primary" onclick="trimAudio()" style="background: rgba(34,211,238,0.1); border: 1px solid var(--cyan); color: #22d3ee;">
+                            <span>✂️ Cortar Seleção e Salvar</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- ABA: CONFIGURAÇÕES -->
+        <div id="tab-config" class="tab-content">
+            <div class="card">
+                <div class="card-title">🩺 Serviços locais</div>
+                <div id="cfg-svc" style="font-size:0.85rem;line-height:2;">verificando…</div>
+                <p style="font-size:0.74rem;color:var(--muted);margin-top:1.2rem;line-height:1.6;">
+                    Status dos serviços locais que o Voice Lab pode usar.
+                </p>
+            </div>
+        </div>
+    </main>
+
+    <div id="toast"></div>
+
+    <script>
+        const API = 'http://localhost:8000';
+        let state = {
+            voices: [],
+            fused: [],
+            selectedTTS: null,
+            selectedFusionA: null,
+            selectedFusionB: null,
+            selectedFusionMany: {},
+            engines: null
+        };
+
+        // --- Navegação ---
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            const btn = document.querySelector(`[onclick="switchTab('${tab}')"]`);
+            if (btn) btn.classList.add('active');
+            document.getElementById(`tab-${tab}`).classList.add('active');
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        // --- Servidor & Dados ---
+        async function checkServer() {
+            try {
+                const r = await fetch(`${API}/health`);
+                if(r.ok) {
+                    document.getElementById('status-dot').className = 'ping online';
+                    document.getElementById('status-text').innerText = 'Servidor Online';
+                    updateEngineStatus();
+                    loadData();
+                }
+            } catch(e) {
+                document.getElementById('status-dot').className = 'ping';
+                document.getElementById('status-text').innerText = 'Servidor Offline';
+            }
+        }
+
+        async function updateEngineStatus() {
+            try {
+                const r = await fetch(`${API}/engines/status`);
+                if (!r.ok) return;
+                const data = await r.json();
+                state.engines = data;
+                const vram = data.vram || {};
+                const configured = data.configured ?? '--';
+                const loaded = data.loaded ?? '--';
+                const allocated = vram.allocated_gb ?? '--';
+                const total = vram.total_gb ?? '--';
+                const perEngine = vram.per_engine_estimated_gb ?? '--';
+                const failed = (data.slots || []).filter(s => s.status !== 'ready').length;
+                document.getElementById('engine-stats').innerHTML = `
+                    <span class="engine-pill">Engines: ${loaded}/${configured}</span>
+                    <span class="engine-pill">VRAM app: ${allocated}/${total} GB</span>
+                    <span class="engine-pill">Por engine: ${perEngine} GB</span>
+                    ${failed ? `<span class="engine-pill" style="color:#fca5a5;">Falhas: ${failed}</span>` : ''}
+                `;
+                const select = document.getElementById('engine-count-select');
+                if (select && String(select.value) !== String(configured)) {
+                    select.value = configured;
+                }
+            } catch(e) {}
+        }
+
+        async function saveEngineConfig() {
+            const engineCount = Number(document.getElementById('engine-count-select').value);
+            try {
+                const r = await fetch(`${API}/engines/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ engine_count: engineCount })
+                });
+                if (!r.ok) throw new Error("Falha ao salvar engines");
+                const data = await r.json();
+                showToast(`Engines salvas: ${data.configured}. Reinicie o servidor para aplicar.`);
+                updateEngineStatus();
+            } catch(e) {
+                showToast("Erro ao salvar quantidade de engines");
+            }
+        }
+
+        async function loadData() {
+            try {
+                const r = await fetch(`${API}/voices`);
+                const data = await r.json();
+                state.voices = data.wav;
+                state.fused = data.fused;
+                renderVoiceGrids();
+                loadBiometryUsers();
+            } catch(e) {
+                showToast("Erro ao carregar dados do servidor");
+            }
+        }
+
+        // Mini-onda decorativa da linha de voz: altura das barras derivada do nome,
+        // então é estável entre renders (não pisca) e não depende do áudio.
+        function waveBars(name) {
+            let h = 2166136261;
+            for (let i = 0; i < String(name).length; i++) {
+                h = (Math.imul(h ^ String(name).charCodeAt(i), 16777619)) >>> 0;
+            }
+            let out = '';
+            for (let i = 0; i < 10; i++) {
+                h = (Math.imul(h, 1103515245) + 12345) >>> 0;
+                out += `<i style="height:${20 + (h >>> 16) % 80}%"></i>`;
+            }
+            return `<div class="wave-mini" aria-hidden="true">${out}</div>`;
+        }
+
+        function renderVoiceGrids() {
+            // Verifica se algo mudou antes de re-renderizar tudo
+            const currentDataHash = JSON.stringify(state.voices) + JSON.stringify(state.fused) + state.selectedTTS + state.selectedFusionA + state.selectedFusionB + JSON.stringify(state.selectedFusionMany);
+            if (state.lastGridsHash === currentDataHash) return;
+            state.lastGridsHash = currentDataHash;
+
+            const ttsGrid = document.getElementById('tts-voice-grid');
+            
+            const allItems = [
+                ...state.voices.map(v => ({...v, type: 'wav'})),
+                ...state.fused.map(f => ({...f, type: 'fused'}))
+            ];
+
+            // Render TTS Grid
+            ttsGrid.innerHTML = allItems.map(item => `
+                <div class="voice-card ${state.selectedTTS === item.name ? 'selected' : ''}" onclick="selectVoice('tts', '${item.name}')">
+                    <div class="voice-tag tag-${item.type}">${item.type}</div>
+                    <div class="vc-meta">
+                        <div class="vc-name">${item.name}</div>
+                        ${item.duration ? `<div class="vc-dur">${item.duration}s</div>` : ''}
+                    </div>
+                    ${waveBars(item.name)}
+                    <button onclick="playVoicePreview('${item.type}', '${item.name}', event)" class="play-btn" title="Ouvir Preview"><span>▶</span></button>
+                </div>
+            `).join('');
+
+            const fuseGridMany = document.getElementById('fusion-grid-many');
+            if (fuseGridMany) {
+                fuseGridMany.innerHTML = state.voices.map(item => `
+                    <div class="voice-card ${state.selectedFusionMany[item.name] ? 'selected' : ''}" onclick="selectVoice('fusionMany', '${item.name}')">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div class="voice-tag tag-wav">WAV</div>
+                            <button onclick="playVoicePreview('wav', '${item.name}', event)" class="play-btn" title="Ouvir Preview"><span>▶</span></button>
+                        </div>
+                        <div style="font-weight: 600; font-size: 0.8rem;">${item.name}</div>
+                        ${state.selectedFusionMany[item.name] ? `<div style="font-size: 0.7rem; color: var(--pink); margin-top: 0.4rem;">Selecionada</div>` : ''}
+                    </div>
+                `).join('');
+            }
+
+            // Render Fusion Grids (Apenas originais)
+            const fuseGridA = document.getElementById('fusion-grid-a');
+            if (fuseGridA) {
+                fuseGridA.innerHTML = state.voices.map(item => `
+                    <div class="voice-card ${state.selectedFusionA === item.name ? 'selected' : ''}" id="fuse-a-${item.name}" onclick="selectVoice('fusionA', '${item.name}')">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div class="voice-tag tag-wav">WAV</div>
+                            <button onclick="playVoicePreview('wav', '${item.name}', event)" class="play-btn" title="Ouvir Preview"><span>▶</span></button>
+                        </div>
+                        <div style="font-weight: 600; font-size: 0.8rem;">${item.name}</div>
+                    </div>
+                `).join('');
+            }
+            
+            const fuseGridB = document.getElementById('fusion-grid-b');
+            if (fuseGridB) {
+                fuseGridB.innerHTML = state.voices.map(item => `
+                    <div class="voice-card ${state.selectedFusionB === item.name ? 'selected' : ''}" id="fuse-b-${item.name}" onclick="selectVoice('fusionB', '${item.name}')">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div class="voice-tag tag-wav">WAV</div>
+                            <button onclick="playVoicePreview('wav', '${item.name}', event)" class="play-btn" title="Ouvir Preview"><span>▶</span></button>
+                        </div>
+                        <div style="font-weight: 600; font-size: 0.8rem;">${item.name}</div>
+                    </div>
+                `).join('');
+            }
+
+            // Render Fusion History Grid
+            const historyGrid = document.getElementById('fusion-history-grid');
+            if (historyGrid) {
+                if (state.fused.length === 0) {
+                    historyGrid.innerHTML = '<div style="color: var(--muted); padding: 1rem; font-size: 0.8rem;">Nenhuma fusão gerada ainda.</div>';
+                } else {
+                    historyGrid.innerHTML = state.fused.map(item => `
+                        <div class="voice-card">
+                            <div style="display: flex; justify-content: space-between; align-items: start;">
+                                <div class="voice-tag tag-fused">FUSED</div>
+                                <button onclick="playVoicePreview('fused', '${item.name}', event)" class="play-btn" title="Ouvir Preview"><span>▶</span></button>
+                            </div>
+                            <div style="font-weight: 600; font-size: 0.8rem;">${item.name}</div>
+                            <button onclick="window.lastFusedName='${item.name}'; useFusionVoice()" style="margin-top:0.8rem; width:100%; padding:0.4rem; font-size:0.7rem; background:rgba(124,58,237,0.1); border:1px solid var(--purple); color:#a78bfa; border-radius:6px; cursor:pointer;">✅ Usar</button>
+                        </div>
+                    `).join('');
+                }
+            }
+
+            // Populate Youtube target voice
+            const ytTarget = document.getElementById('yt-target-voice');
+            if (ytTarget) {
+                const currentVal = ytTarget.value;
+                ytTarget.innerHTML = '<option value=""> Nenhuma (Extrair qualquer fala humana) </option>' +
+                    state.voices.map(v => `<option value="${v.file}">${v.name}</option>`).join('');
+                ytTarget.value = currentVal;
+            }
+        }
+
+        function selectVoice(target, name) {
+            if (target === 'tts') {
+                state.selectedTTS = name;
+            } else if (target === 'fusionA') {
+                state.selectedFusionA = name;
+            } else if (target === 'fusionB') {
+                state.selectedFusionB = name;
+            } else if (target === 'fusionMany') {
+                if (state.selectedFusionMany[name]) {
+                    delete state.selectedFusionMany[name];
+                } else {
+                    state.selectedFusionMany[name] = true;
+                }
+            }
+            renderVoiceGrids();
+        }
+
+        let currentAudioPreview = null;
+        let currentAudioUrl = null;
+        let previewRequest = 0;
+        function getPreviewPlayer() {
+            let player = document.getElementById('voice-preview-player');
+            if (!player) {
+                const panel = document.createElement('section');
+                panel.setAttribute('aria-label', 'Ouvir voz selecionada');
+                panel.style.cssText = 'position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:9999;padding:12px;background:var(--bg,#171923);border:1px solid var(--muted,#666);border-radius:12px;width:min(480px,calc(100vw - 32px));box-sizing:border-box';
+                const label = document.createElement('div');
+                label.id = 'voice-preview-label';
+                label.style.cssText = 'margin-bottom:8px;overflow-wrap:anywhere';
+                player = document.createElement('audio');
+                player.id = 'voice-preview-player';
+                player.controls = true;
+                player.preload = 'auto';
+                player.style.width = '100%';
+                panel.append(label, player);
+                document.body.append(panel);
+            }
+            return player;
+        }
+        // Only one visible player speaks at a time, including generated audio.
+        document.addEventListener('play', (event) => {
+            if (event.target.tagName !== 'AUDIO') return;
+            document.querySelectorAll('audio').forEach(audio => {
+                if (audio !== event.target) audio.pause();
+            });
+        }, true);
+        async function playVoicePreview(type, name, event) {
+            if (event) event.stopPropagation();
+            const request = ++previewRequest;
+            const player = getPreviewPlayer();
+            player.pause();
+            document.getElementById('voice-preview-label').textContent = 'Carregando: ' + name;
+            try {
+                const response = await fetch(`${API}/voices/play/${type}/${encodeURIComponent(name)}`);
+                if (!response.ok) throw new Error('Preview indisponivel');
+                const blob = await response.blob();
+                if (request !== previewRequest) return;
+                player.removeAttribute('src');
+                player.load();
+                if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
+                currentAudioUrl = URL.createObjectURL(blob);
+                currentAudioPreview = player;
+                player.src = currentAudioUrl;
+                document.getElementById('voice-preview-label').textContent = name;
+                try {
+                    await player.play();
+                } catch (error) {
+                    showToast('Use o player para iniciar a reproducao.');
+                }
+            } catch(e) {
+                if (request !== previewRequest) return;
+                document.getElementById('voice-preview-label').textContent = 'Preview indisponivel: ' + name;
+                showToast('Arquivo de audio indisponivel para preview.');
+            }
+        }
+
+        // --- TTS ---
+        async function synthesize() {
+            const text = document.getElementById('tts-text').value.trim();
+            if (!text) return showToast("Digite um texto!");
+            if (!state.selectedTTS) return showToast("Selecione uma voz!");
+
+            const btn = document.getElementById('btn-synthesize');
+            btn.disabled = true;
+            btn.innerHTML = "<span>⏳ Processando...</span>";
+            
+            const t0 = Date.now();
+            const item = [...state.voices, ...state.fused].find(i => i.name === state.selectedTTS);
+            const endpoint = item.type === 'fused' ? '/synthesize_fused' : '/synthesize';
+            // Presets de voz do Rei — enviados ao backend em /synthesize e /synthesize_fused.
+            // Sem isto o servidor cai nos defaults (rep=2.0), que produz artefato e voz robotica.
+            /* Medido em 2026-08-09 contra a referencia do Pai, 10 amostras por config,
+               formante F1 da vogal medido com Whisper local:
+                 temp 0.72 (antigo) -> F1 medio 416 Hz, 1 acerto em 10
+                 temp 0.30 (agora)  -> F1 medio 449 Hz, 2 acertos em 9
+                 temp 0.15          -> F1 medio 328 Hz, 0 acertos  (temperatura baixa demais PIORA)
+               O ganho de pronuncia e pequeno e esta dentro do ruido; o que muda de
+               verdade e o tom, que fica mais contido. Foi este o parametro do audio
+               que o Pai aprovou. Nao baixar mais que 0.30. */
+            const VOICE_PRESETS = {
+                natural:    { temperature: 0.85, top_k: 60, top_p: 0.92, repetition_penalty: 1.05 },
+                expressivo: { temperature: 0.88, top_k: 55, top_p: 0.90, repetition_penalty: 1.00 },
+                controlado: { temperature: 0.30, top_k: 30, top_p: 0.80, repetition_penalty: 1.20 }
+            };
+            const presetEl = document.getElementById('tts-preset');
+            const presetName = presetEl ? presetEl.value : 'controlado';
+            const gen = VOICE_PRESETS[presetName] || VOICE_PRESETS.controlado;
+            const lang = document.getElementById('tts-lang').value;
+
+            const body = item.type === 'fused'
+                ? { text, embedding_name: item.name, language: lang, ...gen }
+                : { text, speaker_wav: item.path, language: lang, ...gen };
+            console.log('[Celia] preset=' + presetName, gen);
+
+            try {
+                const r = await fetch(`${API}${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                
+                if (!r.ok) throw new Error("Erro na síntese");
+                
+                const blob = await r.blob();
+                const url = URL.createObjectURL(blob);
+                const player = document.getElementById('audio-player');
+                player.src = url;
+                document.getElementById('tts-result').style.display = 'block';
+                document.getElementById('tts-time').innerText = `${Date.now() - t0}ms`;
+                player.play();
+            } catch(e) {
+                showToast("Erro: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = "<span>⚡ Gerar Áudio</span>";
+            }
+        }
+
+        // --- Fusion ---
+        function buildFusionVariantWeights(count, variantIndex) {
+            const base = Array(count).fill(1);
+            if (count === 2) {
+                const presets = [[70, 30], [30, 70], [55, 45], [45, 55], [50, 50]];
+                return presets[variantIndex % presets.length];
+            }
+            base[variantIndex % count] = 3;
+            base[(variantIndex + 1) % count] = 2;
+            return base;
+        }
+
+        async function fuseVoices() {
+            const selected = Object.keys(state.selectedFusionMany);
+            if (selected.length < 2) return showToast("Selecione pelo menos duas vozes!");
+            const name = document.getElementById('fusion-name').value.trim();
+            if (!name) return showToast("Dê um nome à nova voz!");
+            let phrase = document.getElementById('fusion-phrase').value.trim();
+            if (!phrase) phrase = "Olá, esta é minha nova voz criada por fusão neural.";
+
+            const btn = document.getElementById('btn-fuse');
+            btn.disabled = true;
+            btn.innerHTML = `<span>Gerando 5 variações...</span>`;
+
+            try {
+                for (let i = 0; i < 5; i++) {
+                    btn.innerHTML = `<span>Gerando variação ${i + 1}/5...</span>`;
+                    const variantName = `${name}_v${i + 1}`;
+                    const r = await fetch(`${API}/voices/fuse_many`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            voices: selected.map(v => `${v}.wav`),
+                            weights: buildFusionVariantWeights(selected.length, i),
+                            name: variantName,
+                            preview_text: phrase,
+                            preview_language: "pt"
+                        })
+                    });
+
+                    if (!r.ok) {
+                        const err = await r.json();
+                        throw new Error(err.detail || "Erro na fusão");
+                    }
+                }
+
+                showToast("5 variações de quimera criadas com sucesso!");
+                window.lastFusedName = `${name}_v1`;
+                loadData();
+            } catch(e) {
+                showToast("Erro: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = "<span>Gerar 5 Variações</span>";
+            }
+        }
+
+        function useFusionVoice() {
+            if (!window.lastFusedName) return;
+            switchTab('tts');
+            setTimeout(() => {
+                const allItems = [...state.voices, ...state.fused];
+                const found = allItems.find(i => i.name === window.lastFusedName);
+                if (found) {
+                    state.selectedTTS = window.lastFusedName;
+                    renderVoiceGrids();
+                    showToast(`✅ Voz "${window.lastFusedName}" selecionada!`);
+                }
+            }, 500);
+        }
+
+        // --- Biometria ---
+        async function loadBiometryUsers() {
+            try {
+                const r = await fetch(`${API}/biometry/users`);
+                const data = await r.json();
+                
+                // Só atualiza se a lista de usuários mudar
+                const currentUsersHash = JSON.stringify(data.users);
+                if (state.lastUsersHash === currentUsersHash) return;
+                state.lastUsersHash = currentUsersHash;
+
+                state.biometryUsers = data.users;
+                
+                // Popula lista de tags (biometria)
+                const list = document.getElementById('bio-user-list');
+                if (list) {
+                    list.innerHTML = data.users.map(u => `
+                        <div style="background: rgba(124, 58, 237, 0.1); padding: 0.5rem 1rem; border-radius: 100px; font-size: 0.7rem; border: 1px solid var(--purple-glow);">
+                            ${u.name} 
+                            <span style="margin-left: 0.5rem; cursor: pointer; color: #ef4444;" onclick="deleteBiometry('${u.name}')">×</span>
+                        </div>
+                    `).join('');
+                }
+                
+                // Popula dropdown do Isolador (Apenas Biometria)
+                const isoSelect = document.getElementById('iso-user-name');
+                if (isoSelect) {
+                    const currentVal = isoSelect.value;
+                    isoSelect.innerHTML = '<option value="">Selecione um locutor...</option>' + 
+                        data.users.map(u => `<option value="${u.name}">${u.name}</option>`).join('');
+                    isoSelect.value = currentVal;
+                }
+
+                // Popula dropdown do YouTube (WAVs + Biometrias)
+                const ytTarget = document.getElementById('yt-target-voice');
+                if (ytTarget) {
+                    const currentVal = ytTarget.value;
+                    let options = '<option value=""> Nenhuma (Extrair qualquer fala humana) </option>';
+                    
+                    // Adiciona WAVs
+                    options += '<optgroup label="Biblioteca WAV">';
+                    options += state.voices.map(v => `<option value="${v.file}">${v.name}</option>`).join('');
+                    options += '</optgroup>';
+                    
+                    // Adiciona Biometrias
+                    if (data.users.length > 0) {
+                        options += '<optgroup label="Biometrias Salvas">';
+                        options += data.users.map(u => `<option value="${u.name}.pkl">${u.name}</option>`).join('');
+                        options += '</optgroup>';
+                    }
+                    
+                    ytTarget.innerHTML = options;
+                    ytTarget.value = currentVal;
+                }
+            } catch(e) {}
+        }
+
+        async function registerBiometry() {
+            const name = document.getElementById('bio-reg-name').value.trim();
+            const file = document.getElementById('bio-reg-file').files[0];
+            if (!name || !file) return showToast("Preencha nome e selecione áudio!");
+
+            const formData = new FormData();
+            formData.append('user_name', name);
+            formData.append('file', file);
+
+            try {
+                const r = await fetch(`${API}/biometry/register`, { method: 'POST', body: formData });
+                if (r.ok) {
+                    showToast("✅ Usuário registrado!");
+                    loadBiometryUsers();
+                }
+            } catch(e) { showToast("Erro no registro"); }
+        }
+
+        async function identifyVoice() {
+            const file = document.getElementById('bio-file').files[0];
+            if (!file) return;
+
+            document.getElementById('radar-line').style.display = 'block';
+            document.getElementById('radar-status').innerHTML = "<div>🔍 Analisando...</div>";
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const r = await fetch(`${API}/biometry/identify`, { method: 'POST', body: formData });
+                const data = await r.json();
+                
+                document.getElementById('bio-result').style.display = 'block';
+                document.getElementById('bio-match-name').innerText = data.best_match.toUpperCase();
+                document.getElementById('bio-match-conf').innerText = `Confiança: ${data.confidence}%`;
+                
+                if (data.identified) {
+                    document.getElementById('bio-match-name').parentElement.style.borderColor = 'var(--cyan)';
+                } else {
+                    document.getElementById('bio-match-name').innerText = "DESCONHECIDO";
+                    document.getElementById('bio-match-name').parentElement.style.borderColor = '#ef4444';
+                }
+            } catch(e) { showToast("Erro na análise"); }
+            finally {
+                document.getElementById('radar-line').style.display = 'none';
+                document.getElementById('radar-status').innerHTML = "<div>🎙️</div><div style='font-size:0.8rem; color:var(--muted);'>Análise Completa</div>";
+            }
+        }
+
+        async function isolateVoice() {
+            const userName = document.getElementById('iso-user-name').value;
+            const file = document.getElementById('iso-file').files[0];
+            const confidence = document.getElementById('iso-confidence').value;
+            
+            if (!userName || !file) return showToast("Selecione o locutor e o arquivo de áudio!");
+            
+            const btn = document.getElementById('btn-isolate');
+            btn.disabled = true;
+            btn.innerHTML = "<span>⏳ Isolando Voz...</span>";
+            
+            const formData = new FormData();
+            formData.append('user_name', userName);
+            formData.append('file', file);
+            formData.append('confidence_target', confidence);
+            
+            try {
+                const r = await fetch(`${API}/biometry/isolate`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!r.ok) throw new Error("Erro no isolamento");
+                
+                const blob = await r.blob();
+                const url = URL.createObjectURL(blob);
+                const player = document.getElementById('iso-player');
+                player.src = url;
+                document.getElementById('iso-result').style.display = 'block';
+                player.play();
+                showToast("✅ Voz isolada com sucesso!");
+            } catch(e) {
+                showToast("Erro: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = "<span>🚀 Isolar Voz</span>";
+            }
+        }
+
+        async function deleteBiometry(name) {
+            if(!confirm(`Excluir biometria de ${name}?`)) return;
+            try {
+                await fetch(`${API}/biometry/${name}`, { method: 'DELETE' });
+                loadBiometryUsers();
+            } catch(e) {}
+        }
+
+        function audioTreatmentPreviewUrl(path, kind) {
+            if (!path) return "";
+            const fileName = path.split(/[\\/]/).pop().replace(/\.wav$/i, "");
+            return `${API}/audio_treatment/play/${kind}/${encodeURIComponent(fileName)}?t=${Date.now()}`;
+        }
+
+        function resetAudioTreatmentPreviews(prefix) {
+            const box = document.getElementById(`${prefix}-treatment-preview`);
+            const voice = document.getElementById(`${prefix}-voice-preview`);
+            const background = document.getElementById(`${prefix}-background-preview`);
+            [voice, background].forEach(audio => {
+                if (!audio) return;
+                audio.pause();
+                audio.removeAttribute('src');
+                audio.load();
+            });
+            if (box) box.style.display = "none";
+        }
+
+        function showAudioTreatmentPreviews(prefix, data) {
+            const box = document.getElementById(`${prefix}-treatment-preview`);
+            const voice = document.getElementById(`${prefix}-voice-preview`);
+            const background = document.getElementById(`${prefix}-background-preview`);
+            if (!box || !voice || !background || !data.used_audio_treatment) {
+                resetAudioTreatmentPreviews(prefix);
+                return;
+            }
+            voice.src = audioTreatmentPreviewUrl(data.voice_or_singing_path, "voz_ou_canto");
+            background.src = audioTreatmentPreviewUrl(data.background_or_track_path, "fundo_ou_trilha");
+            voice.load();
+            background.load();
+            box.style.display = "block";
+        }
+
+        async function downloadAudioTreatmentResult(data, kind, suffix) {
+            const url = audioTreatmentPreviewUrl(
+                kind === "voz_ou_canto" ? data.voice_or_singing_path : data.background_or_track_path,
+                kind
+            );
+            if (!url) return;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error("Falha ao baixar audio tratado");
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = objectUrl;
+            a.download = `${data.name || 'audio'}_${suffix}.wav`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+        }
+
+        // --- Biblioteca ---
+        async function uploadVoice() {
+            resetAudioTreatmentPreviews("upload");
+            const input = document.getElementById('lib-upload');
+            const file = input.files[0];
+            if (!file) return;
+            const name = document.getElementById('lib-upload-name').value.trim();
+            const formData = new FormData();
+            formData.append('file', file);
+            if (name) formData.append('name', name);
+            if (document.getElementById('lib-separate-audio').checked) {
+                formData.append('separate_audio', 'true');
+            }
+            
+            showToast("⏳ Convertendo e salvando na Biblioteca...");
+            try {
+                const r = await fetch(`${API}/voices/upload`, { method: 'POST', body: formData });
+                if (r.ok) {
+                    showToast("✅ Arquivo importado e salvo!");
+                    const data = await r.json();
+                    showAudioTreatmentPreviews("upload", data);
+                    document.getElementById('lib-upload-name').value = '';
+                    input.value = '';
+                    loadData();
+                } else {
+                    const err = await r.json();
+                    showToast("Erro: " + err.detail);
+                }
+            } catch(e) { showToast("Erro no upload"); }
+        }
+
+        async function convertAudio(saveToLib = false) {
+            resetAudioTreatmentPreviews("library");
+            const input = document.getElementById('conv-file');
+            const file = input.files[0];
+            if (!file) return showToast("Selecione um arquivo!");
+            const format = document.getElementById('conv-format').value;
+            const speed = document.getElementById('conv-speed').value;
+            const name = document.getElementById('conv-name').value.trim();
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('format', format);
+            formData.append('speed', speed);
+            if (saveToLib) formData.append('save_to_library', 'true');
+            if (name) formData.append('custom_name', name);
+            const separateAudio = document.getElementById('conv-separate-audio').checked;
+            if (separateAudio) {
+                formData.append('separate_audio', 'true');
+            }
+
+            showToast(saveToLib ? "⏳ Processando e salvando..." : (separateAudio ? "⏳ Separando e baixando..." : "⏳ Convertendo..."));
+            try {
+                const r = await fetch(`${API}/convert`, { method: 'POST', body: formData });
+                if (r.ok) {
+                    if (saveToLib) {
+                        const data = await r.json();
+                        showAudioTreatmentPreviews("library", data);
+                        showToast("✅ Arquivo salvo no acervo!");
+                        loadData();
+                        document.getElementById('conv-name').value = '';
+                        input.value = '';
+                    } else if (separateAudio) {
+                        const data = await r.json();
+                        showAudioTreatmentPreviews("library", data);
+                        await downloadAudioTreatmentResult(data, "voz_ou_canto", "voz_ou_canto");
+                        await downloadAudioTreatmentResult(data, "fundo_ou_trilha", "fundo_ou_trilha");
+                        showToast("Voz/canto e fundo/trilha baixados!");
+                        input.value = '';
+                    } else {
+                        const blob = await r.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = name ? `${name}.${format}` : `converted.${format}`;
+                        a.click();
+                        showToast("✅ Download iniciado!");
+                        input.value = '';
+                    }
+                } else {
+                    const err = await r.json();
+                    showToast("Erro: " + err.detail);
+                }
+            } catch(e) { showToast("Erro na conversão"); }
+        }
+
+        function updateTrimDisplay() {
+            const disp = document.getElementById('trim-display');
+            if (disp) {
+                disp.innerText = `⏳ Seleção: ${trimStart.toFixed(2)}s até ${trimEnd.toFixed(2)}s`;
+            }
+        }
+
+        async function trimAudio() {
+            const file = document.getElementById('trim-file').files[0];
+            if (!file) return showToast("Selecione um arquivo de áudio ou vídeo!");
+            const name = document.getElementById('trim-name').value.trim();
+            const useVad = document.getElementById('trim-vad').checked;
+            const action = document.getElementById('trim-action').value;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('start_time', trimStart.toFixed(2));
+            formData.append('end_time', trimEnd.toFixed(2));
+            if (name) formData.append('custom_name', name);
+            if (useVad) formData.append('remove_silence', 'true');
+            if (action) formData.append('action_type', action);
+
+            showToast("⏳ Processando e limpando o áudio...");
+            try {
+                const r = await fetch(`${API}/convert/trim`, { method: 'POST', body: formData });
+                if (r.ok) {
+                    showToast("✅ Áudio cortado com sucesso!");
+                    loadData();
+                    document.getElementById('trim-name').value = '';
+                } else {
+                    const err = await r.json();
+                    showToast("Erro: " + err.detail);
+                }
+            } catch(e) { showToast("Erro no corte"); }
+        }
+
+        // --- Timeline Visual do Cortador ---
+        let trimAudioBuffer = null;
+        let trimDuration = 0;
+        let trimStart = 0;
+        let trimEnd = 0;
+        let isDraggingTrim = false;
+        let dragHandle = null;
+        let animationFrameId = null;
+
+        const trimPlayer = document.getElementById('trim-audio-player');
+        const trimCanvas = document.getElementById('trim-canvas');
+
+        trimPlayer.addEventListener('play', () => { drawWaveform(); });
+        trimPlayer.addEventListener('seeked', () => { drawWaveform(); });
+
+        document.getElementById('trim-file').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const url = URL.createObjectURL(file);
+            trimPlayer.src = url;
+
+            const arrayBuffer = await file.arrayBuffer();
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            try {
+                trimAudioBuffer = await ctx.decodeAudioData(arrayBuffer);
+                trimDuration = trimAudioBuffer.duration;
+                trimStart = 0;
+                trimEnd = trimDuration;
+                
+                updateTrimDisplay();
+                drawWaveform();
+            } catch (err) {
+                showToast("Erro ao gerar gráfico visual do áudio.");
+            }
+        });
+
+        function drawWaveform() {
+            if (!trimAudioBuffer) return;
+            const width = trimCanvas.width;
+            const height = trimCanvas.height;
+            const ctx = trimCanvas.getContext('2d');
+            
+            ctx.clearRect(0, 0, width, height);
+            
+            const data = trimAudioBuffer.getChannelData(0);
+            const step = Math.ceil(data.length / width);
+            const amp = height / 2;
+            
+            ctx.fillStyle = '#4b5563'; 
+            for (let i = 0; i < width; i++) {
+                let min = 1.0;
+                let max = -1.0;
+                for (let j = 0; j < step; j++) {
+                    const datum = data[(i * step) + j]; 
+                    if (datum < min) min = datum;
+                    if (datum > max) max = datum;
+                }
+                ctx.fillRect(i, (1 + min) * amp, 1, Math.max(1, (max - min) * amp));
+            }
+            
+            const startX = (trimStart / trimDuration) * width;
+            const endX = (trimEnd / trimDuration) * width;
+            
+            ctx.fillStyle = 'rgba(34, 211, 238, 0.25)';
+            ctx.fillRect(startX, 0, endX - startX, height);
+            
+            ctx.fillStyle = '#22d3ee';
+            ctx.fillRect(startX - 2, 0, 4, height);
+            ctx.fillRect(endX - 2, 0, 4, height);
+
+            if (trimDuration > 0) {
+                const playX = (trimPlayer.currentTime / trimDuration) * width;
+                ctx.fillStyle = '#ef4444';
+                ctx.fillRect(playX - 1, 0, 2, height);
+            }
+
+            if (!trimPlayer.paused) {
+                animationFrameId = requestAnimationFrame(drawWaveform);
+            }
+        }
+
+        trimCanvas.addEventListener('mousemove', (e) => {
+            if (!trimAudioBuffer) return;
+            const rect = trimCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const time = (x / rect.width) * trimDuration;
+            
+            if (!dragHandle) {
+                const startHover = Math.abs(time - trimStart) < (trimDuration * 0.02);
+                const endHover = Math.abs(time - trimEnd) < (trimDuration * 0.02);
+                if (startHover || endHover) trimCanvas.style.cursor = 'ew-resize';
+                else trimCanvas.style.cursor = 'crosshair';
+            }
+
+            if (dragHandle === 'start') {
+                trimStart = Math.min(time, trimEnd - 0.1);
+                trimStart = Math.max(0, trimStart);
+                updateTrimDisplay();
+                drawWaveform();
+            } else if (dragHandle === 'end') {
+                trimEnd = Math.max(time, trimStart + 0.1);
+                trimEnd = Math.min(trimDuration, trimEnd);
+                updateTrimDisplay();
+                drawWaveform();
+            } else if (dragHandle === 'new_start') {
+                trimStart = parseFloat(trimCanvas.getAttribute('data-drag-start'));
+                trimEnd = time;
+                dragHandle = 'new';
+                updateTrimDisplay();
+                drawWaveform();
+            } else if (dragHandle === 'new') {
+                trimEnd = time;
+                updateTrimDisplay();
+                drawWaveform();
+            }
+        });
+
+        trimCanvas.addEventListener('mousedown', (e) => {
+            if (!trimAudioBuffer) return;
+            const rect = trimCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const time = (x / rect.width) * trimDuration;
+            
+            const startHover = Math.abs(time - trimStart) < (trimDuration * 0.02);
+            const endHover = Math.abs(time - trimEnd) < (trimDuration * 0.02);
+            
+            if (startHover) {
+                dragHandle = 'start';
+            } else if (endHover) {
+                dragHandle = 'end';
+            } else {
+                trimPlayer.currentTime = time;
+                drawWaveform();
+                dragHandle = 'new_start';
+                trimCanvas.setAttribute('data-drag-start', time);
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (dragHandle === 'new_start') {
+                dragHandle = null;
+            } else if (dragHandle === 'new') {
+                if (trimStart > trimEnd) {
+                    let temp = trimStart; trimStart = trimEnd; trimEnd = temp;
+                }
+                dragHandle = null;
+            } else {
+                dragHandle = null;
+            }
+            if(trimAudioBuffer) updateTrimDisplay();
+        });
+
+        // ─── Lab de Criação ──────────────────────────────────────────────────
+
+        // Estado interno dos parâmetros do lab
+        const labParams = { gender: 50, age: 35, pitch: 50, expr: 50, speed: 50 };
+        let lastCreatedName = null;
+
+        // Mapas de label para cada parâmetro
+        const labelMaps = {
+            gender: [[0,20,'♀ Muito Feminino'],[20,40,'♀ Feminino'],[40,60,'Neutro'],[60,80,'♂ Masculino'],[80,100,'♂ Muito Masculino']],
+            age:    [[0,20,'🧒 Jovem'],[20,40,'🧒 Adolescente'],[40,60,'🧑 Adulto'],[60,80,'👨 Maduro'],[80,100,'👴 Idoso']],
+            pitch:  [[0,20,'🔊 Muito Agudo'],[20,40,'🔊 Agudo'],[40,60,'🎵 Médio'],[60,80,'🔉 Grave'],[80,100,'🔉 Muito Grave']],
+            expr:   [[0,20,'😐 Monotônico'],[20,40,'😐 Neutro'],[40,60,'🙂 Balanceado'],[60,80,'😊 Expressivo'],[80,100,'🎭 Dramático']],
+            speed:  [[0,20,'🐢 Muito Lento'],[20,40,'🐢 Lento'],[40,60,'⚡ Normal'],[60,80,'🐇 Rápido'],[80,100,'🐇 Muito Rápido']]
+        };
+
+        function getLabel(param, value) {
+            for (const [lo, hi, label] of labelMaps[param]) {
+                if (value >= lo && value <= hi) return label;
+            }
+            return '';
+        }
+
+        function updateSlider(param, value) {
+            labParams[param] = parseInt(value);
+            // Atualiza label
+            const labelEl = document.getElementById(`val-${param}`);
+            if (labelEl) labelEl.innerText = getLabel(param, parseInt(value));
+            // Anima DNA
+            animateDNA();
+        }
+
+        function animateDNA() {
+            const vals = [
+                labParams.gender, labParams.age, labParams.pitch, labParams.expr, labParams.speed,
+                (labParams.gender + labParams.pitch) / 2,
+                (labParams.age + labParams.expr) / 2,
+                (labParams.pitch + labParams.speed) / 2,
+                (labParams.gender + labParams.age) / 2,
+                (labParams.expr + labParams.speed) / 2,
+            ];
+            vals.forEach((v, i) => {
+                const bar = document.getElementById(`dna-${i}`);
+                if (bar) bar.style.height = Math.max(6, Math.round(v * 0.54 + 6)) + 'px';
+            });
+        }
+
+        async function createVoice() {
+            const name = document.getElementById('create-name').value.trim();
+            if (!name) return showToast('⚠️ Dê um nome à voz!');
+            const previewText = document.getElementById('create-preview-text').value.trim()
+                || 'Olá, esta é minha nova voz criada diretamente da matriz neural.';
+            const lang = document.getElementById('create-lang').value;
+
+            const btn = document.getElementById('btn-create-voice');
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳ Sintetizando DNA Vocal...</span>';
+
+            try {
+                const payload = {
+                    name: name,
+                    gender:         labParams.gender  / 100,
+                    age:            labParams.age     / 100,
+                    pitch:          labParams.pitch   / 100,
+                    expressiveness: labParams.expr    / 100,
+                    speed:          labParams.speed   / 100,
+                    preview_text:   previewText,
+                    preview_language: lang
+                };
+
+                const r = await fetch(`${API}/voices/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!r.ok) {
+                    const err = await r.json();
+                    throw new Error(err.detail || 'Erro no servidor');
+                }
+
+                const data = await r.json();
+                lastCreatedName = data.name;
+
+                // Montar resumo do DNA
+                const summary = `
+                    <b>🧬 DNA Vocal de "${data.name}"</b><br>
+                    ⚤ Gênero: <b>${getLabel('gender', labParams.gender)}</b><br>
+                    🕰️ Idade: <b>${getLabel('age', labParams.age)}</b><br>
+                    🎵 Tom: <b>${getLabel('pitch', labParams.pitch)}</b><br>
+                    ✨ Expressividade: <b>${getLabel('expr', labParams.expr)}</b><br>
+                    ⚡ Velocidade: <b>${getLabel('speed', labParams.speed)}</b>
+                `;
+                document.getElementById('create-dna-summary').innerHTML = summary;
+
+                // Buscar preview do servidor para reproduzir
+                const previewR = await fetch(`${API}/synthesize_fused`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: previewText, embedding_name: data.name, language: lang })
+                });
+                if (previewR.ok) {
+                    const blob = await previewR.blob();
+                    const url = URL.createObjectURL(blob);
+                    const audio = document.getElementById('create-audio');
+                    audio.src = url;
+                    audio.play();
+                }
+
+                document.getElementById('create-result').style.display = 'block';
+                showToast(`🎉 Voz "${data.name}" criada com sucesso!`);
+                loadData(); // Atualiza lista global de vozes
+
+            } catch(e) {
+                showToast('❌ Erro: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>🧪 Criar e Ouvir Voz</span>';
+            }
+        }
+
+        function useCreatedVoice() {
+            if (!lastCreatedName) return;
+            switchTab('tts');
+            // Espera o grid atualizar e seleciona a voz
+            setTimeout(() => {
+                const allItems = [...state.voices, ...state.fused];
+                const found = allItems.find(i => i.name === lastCreatedName);
+                if (found) {
+                    state.selectedTTS = lastCreatedName;
+                    renderVoiceGrids();
+                    showToast(`✅ Voz "${lastCreatedName}" selecionada!`);
+                }
+            }, 500);
+        }
+
+        // Init animação inicial do DNA
+        animateDNA();
+
+        async function downloadYoutubeVoice() {
+            const url = document.getElementById('yt-url').value.trim();
+            const name = document.getElementById('yt-name').value.trim() || 'minha_voz';
+            const duration = parseInt(document.getElementById('yt-duration').value) || 60;
+            const targetVoice = document.getElementById('yt-target-voice').value;
+            
+            if (!url) return showToast("Insira a URL do YouTube!");
+            
+            const btn = document.getElementById('btn-yt-download');
+            btn.disabled = true;
+            btn.innerHTML = "<span>⏳ Processando (Pode demorar vários minutos)...</span>";
+            
+            try {
+                const r = await fetch(`${API}/voices/download_yt`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        url: url, 
+                        name: name, 
+                        max_duration: duration,
+                        target_voice: targetVoice ? targetVoice : null,
+                        similarity_threshold: parseFloat(document.getElementById('yt-similarity').value) / 100,
+                        separate_audio: document.getElementById('yt-separate-audio').checked
+                    })
+                });
+                
+                if (!r.ok) {
+                    const err = await r.json();
+                    throw new Error(err.detail || "Erro ao processar");
+                }
+                
+                const data = await r.json();
+                showAudioTreatmentPreviews("yt", data);
+                showToast(`Voz salva com sucesso: ${data.name} (${data.duration_seconds}s)`);
+                loadData(); // Atualiza a lista
+                switchTab('tts'); // Muda pra tab de síntese
+            } catch(e) {
+                showToast("Erro: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = "<span>📥 Baixar e Extrair Voz</span>";
+            }
+        }
+
+        async function downloadYoutubeRaw() {
+            const url = document.getElementById('ytdl-url').value.trim();
+            if (!url) return showToast("Insira a URL do YouTube!");
+
+            const formatEl = document.querySelector('input[name="ytdl-format"]:checked');
+            const format = formatEl ? formatEl.value : 'mp3';
+
+            const btn = document.getElementById('btn-ytdl');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = `<span>⏳ Baixando ${format.toUpperCase()}...</span>`;
+
+            try {
+                const r = await fetch(`${API}/youtube/raw`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url, format: format })
+                });
+
+                if (!r.ok) {
+                    let detail = "Erro no download";
+                    try { detail = (await r.json()).detail || detail; } catch(_) {}
+                    throw new Error(detail);
+                }
+
+                let filename = `youtube.${format}`;
+                const disp = r.headers.get('Content-Disposition') || '';
+                const m = disp.match(/filename="?([^"]+)"?/);
+                if (m) filename = m[1];
+
+                const blob = await r.blob();
+                const downloadUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(downloadUrl);
+                showToast(`✅ ${filename} baixado!`);
+            } catch(e) {
+                showToast("Erro: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        }
+
+        async function generateCreativeSample() {
+            const input = document.getElementById('creative-file');
+            const file = input.files[0];
+            if (!file) return showToast("Selecione um arquivo de áudio!");
+
+            const name = document.getElementById('creative-name').value.trim();
+            const saveLib = document.getElementById('creative-save-lib').checked;
+            const pollutionLevel = document.getElementById('creative-pollution-level').value || 'none';
+            const removeVocals = document.getElementById('creative-remove-vocals').checked;
+            const mixFile = document.getElementById('creative-mix-file').files[0];
+            const mixAmount = parseInt(document.getElementById('creative-mix-amount').value, 10) / 100;
+            const remixEffect = document.getElementById('creative-remix-effect').value || 'none';
+
+            const formData = new FormData();
+            formData.append('file', file);
+            if (name) formData.append('custom_name', name);
+            if (saveLib) formData.append('save_to_library', 'true');
+            formData.append('pollution_level', pollutionLevel);
+            if (removeVocals) formData.append('remove_vocals', 'true');
+            if (mixFile && mixAmount > 0) {
+                formData.append('mix_file', mixFile);
+                formData.append('mix_amount', String(mixAmount));
+            }
+            if (remixEffect && remixEffect !== 'none') {
+                formData.append('remix_effect', remixEffect);
+            }
+
+            const btn = document.getElementById('btn-creative');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = "<span>⏳ Processando pipeline (time/pitch/EQ/loop/reverb)...</span>";
+
+            const t0 = Date.now();
+            try {
+                const r = await fetch(`${API}/creative/sample`, { method: 'POST', body: formData });
+                if (!r.ok) {
+                    let detail = "Erro no pipeline";
+                    try { detail = (await r.json()).detail || detail; } catch(_) {}
+                    throw new Error(detail);
+                }
+
+                let meta = null;
+                let blob;
+
+                if (saveLib) {
+                    const data = await r.json();
+                    meta = data;
+                    // Recarrega o áudio salvo pra preview
+                    const playRes = await fetch(`${API}/voices/play/wav/${encodeURIComponent(data.name)}`);
+                    if (playRes.ok) blob = await playRes.blob();
+                    showToast(`✅ Sample salvo na biblioteca: ${data.name}`);
+                    loadData();
+                } else {
+                    const metaHeader = r.headers.get('X-Sample-Meta');
+                    if (metaHeader) {
+                        try { meta = JSON.parse(metaHeader); } catch(_) {}
+                    }
+                    blob = await r.blob();
+
+                    // Trigger download automático
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = name ? `${name}.wav` : `creative_sample_${Date.now()}.wav`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    showToast("✅ Sample baixado!");
+                }
+
+                if (blob) {
+                    const previewUrl = URL.createObjectURL(blob);
+                    const player = document.getElementById('creative-audio');
+                    player.src = previewUrl;
+                    document.getElementById('creative-result').style.display = 'block';
+                    document.getElementById('creative-time').innerText = `${Date.now() - t0}ms`;
+                }
+
+                if (meta) {
+                    let pollutionLine = '';
+                    if (meta.pollution_mode && meta.pollution_mode.enabled) {
+                        const p = meta.pollution_mode;
+                        const level = p.level || 'extreme';
+                        const icon = level === 'ultra' ? '💀' : '☢️';
+                        const color = level === 'ultra' ? '#ef4444' : '#f59e0b';
+                        const label = level === 'ultra' ? 'Ultra Poluído' : 'Poluição';
+                        let extra = '';
+                        if (p.wow_flutter) {
+                            extra += `<br><b style="color: ${color};">↳ Wow/Flutter:</b> wow ${p.wow_flutter.wow_hz}Hz / flutter ${p.wow_flutter.flutter_hz}Hz`;
+                        }
+                        if (p.tape_dropouts) {
+                            extra += `<br><b style="color: ${color};">↳ Dropouts:</b> ${p.tape_dropouts.rate_per_sec}/s, atten ${p.tape_dropouts.attenuation}`;
+                        }
+                        pollutionLine = `<br><b style="color: ${color};">${icon} ${label}:</b> bitcrush ${p.bitcrush_target_sr_hz}Hz/${p.bitcrush_bits}-bit + chorus fb ${p.phase_smearing.feedback}${extra}`;
+                    }
+                    const vocalsLine = meta.vocals_removed
+                        ? `<b style="color: var(--pink);">🎤❌ Voz removida</b> (instrumental isolada) &nbsp;|&nbsp; `
+                        : '';
+                    const mixLine = (meta.mix_layer && meta.mix_layer.enabled)
+                        ? `<br><b style="color: #22d3ee;">🎚️ Mix layer:</b> ${(meta.mix_layer.amount*100).toFixed(0)}% do 2º áudio`
+                        : '';
+                    let remixLine = '';
+                    if (meta.remix_effect && meta.remix_effect.effect && meta.remix_effect.effect !== 'none') {
+                        const labels = {
+                            sped_up: '⏩ Sped Up', nightcore: '🌙 Nightcore', slowed: '🐢 Slowed',
+                            slowed_reverb: '🌊 Slowed+Reverb', chipmunk: '🐿️ Chipmunk',
+                            demonic: '👹 Demonic', '8d': '🎧 8D Audio', reverse: '◀️ Reverse',
+                            phonk: '💜 Phonk Drift'
+                        };
+                        const lbl = labels[meta.remix_effect.effect] || meta.remix_effect.effect;
+                        remixLine = `<br><b style="color: #a78bfa;">🔄 Remix:</b> ${lbl}`;
+                    }
+                    document.getElementById('creative-meta').innerHTML = `
+                        ${vocalsLine}<b style="color: var(--cyan);">Tempo:</b> ${meta.tempo_change_pct}% &nbsp;|&nbsp;
+                        <b style="color: var(--pink);">Pitch:</b> ${meta.pitch_semitones > 0 ? '+' : ''}${meta.pitch_semitones} semitom<br>
+                        <b style="color: #a78bfa;">EQ:</b> HPF ${meta.highpass_hz}Hz / LPF ${meta.lowpass_hz}Hz<br>
+                        <b style="color: var(--cyan);">Loop:</b> ${meta.loop_seconds}s (a partir de ${meta.loop_start_seconds}s)<br>
+                        <b style="color: var(--pink);">Texturização:</b> drive ${meta.saturation_drive}× / reverb ${(meta.reverb_wet*100).toFixed(0)}% wet<br>
+                        <b style="color: #fbbf24;">Noise:</b> ${meta.noise_type} ${(meta.noise_mix*100).toFixed(0)}%${pollutionLine}${remixLine}${mixLine}<br>
+                        <b style="color: var(--muted);">Sample rate:</b> ${meta.sample_rate}Hz
+                    `;
+                }
+            } catch(e) {
+                showToast("Erro: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        }
+
+        // Seletor de Efeito de Remix (Sped Up, Nightcore, etc.)
+        function setRemixEffect(effect) {
+            document.getElementById('creative-remix-effect').value = effect;
+            const baseColor = effect === 'none' ? 'var(--cyan)' : '#a78bfa';
+            const baseBg = effect === 'none' ? 'rgba(34,211,238,0.12)' : 'rgba(167,139,250,0.14)';
+            const baseGlow = effect === 'none' ? 'none' : '0 0 16px rgba(167,139,250,0.40)';
+            document.querySelectorAll('.remix-pill').forEach(btn => {
+                if (btn.dataset.remix === effect) {
+                    btn.style.borderColor = baseColor;
+                    btn.style.background = baseBg;
+                    btn.style.color = baseColor;
+                    btn.style.boxShadow = baseGlow;
+                } else {
+                    btn.style.borderColor = 'var(--border)';
+                    btn.style.background = 'rgba(255,255,255,0.03)';
+                    btn.style.color = 'var(--muted)';
+                    btn.style.boxShadow = 'none';
+                }
+            });
+        }
+
+        // Sliders ao vivo (mix amount + restore)
+        document.addEventListener('input', (e) => {
+            if (!e.target) return;
+            if (e.target.id === 'creative-mix-amount') {
+                const val = document.getElementById('creative-mix-amount-val');
+                if (val) val.innerText = `${e.target.value}%`;
+            } else if (e.target.id === 'restore-denoise') {
+                const val = document.getElementById('restore-denoise-val');
+                if (val) val.innerText = `${e.target.value}%`;
+            } else if (e.target.id === 'restore-pitch') {
+                const val = document.getElementById('restore-pitch-val');
+                const v = parseInt(e.target.value, 10);
+                if (val) val.innerText = `${v > 0 ? '+' : ''}${v} semitons`;
+            } else if (e.target.id === 'restore-time') {
+                const val = document.getElementById('restore-time-val');
+                if (val) val.innerText = `${(parseInt(e.target.value, 10) / 100).toFixed(2)}×`;
+            }
+        });
+
+        async function restoreAudio() {
+            const input = document.getElementById('restore-file');
+            const file = input.files[0];
+            if (!file) return showToast("Selecione um arquivo de áudio!");
+
+            const name = document.getElementById('restore-name').value.trim();
+            const saveLib = document.getElementById('restore-save-lib').checked;
+            const denoise = parseInt(document.getElementById('restore-denoise').value, 10) / 100;
+            const eqExpand = document.getElementById('restore-eq-expand').checked;
+            const pitch = parseInt(document.getElementById('restore-pitch').value, 10);
+            const timeRate = parseInt(document.getElementById('restore-time').value, 10) / 100;
+            const linearMode = document.getElementById('restore-linear').checked;
+            const startSec = parseFloat(document.getElementById('restore-start').value) || 0;
+            const endSec = parseFloat(document.getElementById('restore-end').value) || 0;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            if (name) formData.append('custom_name', name);
+            if (saveLib) formData.append('save_to_library', 'true');
+            formData.append('denoise_strength', String(denoise));
+            formData.append('eq_expand', eqExpand ? 'true' : 'false');
+            formData.append('pitch_correction', String(pitch));
+            formData.append('time_correction', String(timeRate));
+            formData.append('start_seconds', String(startSec));
+            formData.append('end_seconds', String(endSec));
+            formData.append('linear_mode', linearMode ? 'true' : 'false');
+
+            const btn = document.getElementById('btn-restore');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = "<span>⏳ Restaurando (denoise + EQ + correções)...</span>";
+
+            const t0 = Date.now();
+            try {
+                const r = await fetch(`${API}/creative/restore`, { method: 'POST', body: formData });
+                if (!r.ok) {
+                    let detail = "Erro na restauração";
+                    try { detail = (await r.json()).detail || detail; } catch(_) {}
+                    throw new Error(detail);
+                }
+
+                let meta = null;
+                let blob;
+
+                if (saveLib) {
+                    const data = await r.json();
+                    meta = data;
+                    const playRes = await fetch(`${API}/voices/play/wav/${encodeURIComponent(data.name)}`);
+                    if (playRes.ok) blob = await playRes.blob();
+                    showToast(`✅ Restaurado e salvo: ${data.name}`);
+                    loadData();
+                } else {
+                    const metaHeader = r.headers.get('X-Restore-Meta');
+                    if (metaHeader) { try { meta = JSON.parse(metaHeader); } catch(_) {} }
+                    blob = await r.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = name ? `${name}_restored.wav` : `restored_${Date.now()}.wav`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    showToast("✅ Áudio restaurado e baixado!");
+                }
+
+                if (blob) {
+                    const previewUrl = URL.createObjectURL(blob);
+                    const player = document.getElementById('restore-audio');
+                    player.src = previewUrl;
+                    document.getElementById('restore-result').style.display = 'block';
+                    document.getElementById('restore-time-meta').innerText = `${Date.now() - t0}ms`;
+                }
+
+                if (meta) {
+                    const lines = [];
+                    if (meta.linear_mode)
+                        lines.push(`<b style="color: var(--cyan);">✂️ Modo Linear:</b> só recorte, sem processamento`);
+                    if (meta.trim_start_seconds !== undefined || meta.trim_end_seconds !== undefined)
+                        lines.push(`<b style="color: #22d3ee;">Trecho:</b> ${meta.trim_start_seconds ?? 0}s → ${meta.trim_end_seconds ?? meta.input_seconds}s`);
+                    if (!meta.linear_mode) {
+                        if (meta.denoise_strength !== undefined)
+                            lines.push(`<b style="color: var(--cyan);">Denoise:</b> ${(meta.denoise_strength*100).toFixed(0)}%`);
+                        if (meta.eq_expand)
+                            lines.push(`<b style="color: var(--pink);">EQ Expansion:</b> graves +6dB / agudos +6dB`);
+                        if (meta.pitch_correction_semitones)
+                            lines.push(`<b style="color: #a78bfa;">Pitch:</b> ${meta.pitch_correction_semitones > 0 ? '+' : ''}${meta.pitch_correction_semitones} semitons`);
+                        if (meta.time_correction_rate)
+                            lines.push(`<b style="color: #fbbf24;">Tempo:</b> ${meta.time_correction_rate}×`);
+                    }
+                    lines.push(`<b style="color: var(--muted);">Duração:</b> ${meta.input_seconds}s → ${meta.output_seconds}s`);
+                    document.getElementById('restore-meta').innerHTML = lines.join(' &nbsp;|&nbsp; ');
+                }
+            } catch(e) {
+                showToast("Erro: " + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            }
+        }
+
+        // Seletor de Nível de Poluição (Limpo / Poluição / Ultra)
+        function setPollutionLevel(level) {
+            document.getElementById('creative-pollution-level').value = level;
+            const styles = {
+                none:    { color: 'var(--cyan)',   bg: 'rgba(34,211,238,0.12)',  glow: 'none' },
+                extreme: { color: '#f59e0b',       bg: 'rgba(245,158,11,0.12)',  glow: '0 0 18px rgba(245,158,11,0.35)' },
+                heavy:   { color: '#fb923c',       bg: 'rgba(251,146,60,0.14)',  glow: '0 0 20px rgba(251,146,60,0.40)' },
+                savage:  { color: '#f43f5e',       bg: 'rgba(244,63,94,0.14)',   glow: '0 0 21px rgba(244,63,94,0.42)' },
+                ultra:   { color: '#ef4444',       bg: 'rgba(239,68,68,0.15)',   glow: '0 0 22px rgba(239,68,68,0.45)' },
+            };
+            document.querySelectorAll('.pollution-pill').forEach(btn => {
+                const isActive = btn.dataset.level === level;
+                const s = styles[btn.dataset.level];
+                if (isActive) {
+                    btn.style.borderColor = s.color;
+                    btn.style.background = s.bg;
+                    btn.style.color = s.color;
+                    btn.style.boxShadow = s.glow;
+                } else {
+                    btn.style.borderColor = 'var(--border)';
+                    btn.style.background = 'rgba(255,255,255,0.03)';
+                    btn.style.color = 'var(--muted)';
+                    btn.style.boxShadow = 'none';
+                }
+            });
+        }
+
+        // Animação do toggle "Modo Linear"
+        document.addEventListener('change', (e) => {
+            if (e.target && e.target.id === 'restore-linear') {
+                const card = document.getElementById('restore-linear-card');
+                const slider = document.getElementById('restore-linear-slider');
+                const knob = document.getElementById('restore-linear-knob');
+                const procIds = ['restore-denoise', 'restore-eq-expand', 'restore-pitch', 'restore-time'];
+                if (e.target.checked) {
+                    card.style.borderColor = 'var(--cyan)';
+                    card.style.background = 'rgba(34,211,238,0.10)';
+                    card.style.boxShadow = '0 0 18px rgba(34,211,238,0.30)';
+                    slider.style.background = 'rgba(34,211,238,0.4)';
+                    slider.style.borderColor = 'var(--cyan)';
+                    knob.style.background = 'var(--cyan)';
+                    knob.style.left = '25px';
+                    knob.style.boxShadow = '0 0 10px var(--cyan)';
+                    procIds.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
+                } else {
+                    card.style.borderColor = 'var(--border)';
+                    card.style.background = 'rgba(255,255,255,0.02)';
+                    card.style.boxShadow = 'none';
+                    slider.style.background = 'rgba(255,255,255,0.08)';
+                    slider.style.borderColor = 'var(--border)';
+                    knob.style.background = 'var(--muted)';
+                    knob.style.left = '3px';
+                    knob.style.boxShadow = 'none';
+                    procIds.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
+                }
+            }
+        });
+
+        // Destaque visual dos cards de formato MP3/MP4
+        document.addEventListener('change', (e) => {
+            if (e.target && e.target.name === 'ytdl-format') {
+                const mp3Card = document.getElementById('ytdl-fmt-mp3-card');
+                const mp4Card = document.getElementById('ytdl-fmt-mp4-card');
+                if (e.target.value === 'mp3') {
+                    mp3Card.style.borderColor = 'var(--cyan)';
+                    mp3Card.style.background = 'rgba(34,211,238,0.1)';
+                    mp4Card.style.borderColor = 'var(--border)';
+                    mp4Card.style.background = 'rgba(255,255,255,0.03)';
+                } else {
+                    mp4Card.style.borderColor = 'var(--pink)';
+                    mp4Card.style.background = 'rgba(232,121,249,0.1)';
+                    mp3Card.style.borderColor = 'var(--border)';
+                    mp3Card.style.background = 'rgba(255,255,255,0.03)';
+                }
+            }
+        });
+
+        // Init
+        checkServer();
+        setInterval(checkServer, 10000);
+        setInterval(updateEngineStatus, 5000);
+    </script>
+    <script>
+    // FX de fundo — partículas lentas + ondas de áudio no fundo.
+    (function(){
+        const c = document.getElementById('celia-fx');
+        if (!c || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const x = c.getContext('2d'); let W, H, parts;
+        function size(){
+            W = c.width = innerWidth; H = c.height = innerHeight;
+            // densidade medida na referencia: 168 particulas por 100x100px
+            // contra 70 nossas. Dobrada.
+            parts = Array.from({length: Math.min(320, Math.round(W/5.5))}, () => ({
+                x: Math.random()*W, y: Math.random()*H, r: Math.random()*1.7+0.4,
+                vx:(Math.random()-.5)*0.14, vy:(Math.random()-.5)*0.14,
+                a: Math.random()*0.55+0.20, f: Math.random()*6.283
+            }));
+        }
+        let t = 0;
+        // fator global de intensidade do espectro. Fica em 1 sozinho; quando o
+        // audio gerado toca, celiaFxNivel() sobe isso e o fundo pulsa com o som.
+        let fade = 1;
+        window.celiaFxNivel = function(v){ fade = 1 + Math.max(0, Math.min(2, v)); };
+        function frame(){
+            x.clearRect(0,0,W,H); t += 0.004;
+
+            /* ERRO 7 — nao sao ondas. A referencia desenha um visualizador de
+               espectro em PARTICULAS: uma curva base varrendo, barras verticais
+               pontilhadas subindo dela como equalizador, perspectiva, e um ponto
+               de luz no cruzamento. Isto recria o principio, com codigo proprio. */
+            const baseY = H*0.19, colunas = Math.round(W/9);
+            for (let i=0; i<colunas; i++){
+                const px = (i+0.5)*(W/colunas);
+                const u  = i/colunas;
+                // curva base: a onda que varre
+                const cy = baseY + Math.sin(u*7.5 + t*1.6)*30 + Math.sin(u*17 - t*2.3)*10;
+                // profundidade: perspectiva. o meio fica "longe", pontos menores
+                const prof = 0.35 + 0.65*Math.abs(Math.sin(u*Math.PI));
+                // altura da barra: espectro pulsando em ritmo irregular
+                const energia = Math.abs(Math.sin(u*11 + t*5.1))*0.55
+                              + Math.abs(Math.sin(u*23 - t*3.3))*0.30
+                              + Math.abs(Math.sin(u*3  + t*1.7))*0.15;
+                const altura = energia * H*0.13 * prof;
+                const pontos = Math.max(2, Math.round(altura/7));
+                for (let k=0; k<pontos; k++){
+                    const f = k/pontos;
+                    const py = cy - f*altura;
+                    const r  = (1.5 - f*0.7) * prof;
+                    const a  = (0.42 - f*0.28) * prof * fade;
+                    if (a <= 0.01) continue;
+                    x.beginPath(); x.arc(px, py, Math.max(0.35,r), 0, 6.283);
+                    x.fillStyle = `rgba(${168+Math.round(f*60)},${120+Math.round(f*40)},255,${a})`;
+                    x.fill();
+                    // reflexo espelhado abaixo da curva, mais fraco
+                    if (f < 0.55){
+                        x.beginPath(); x.arc(px, cy + f*altura*0.55, Math.max(0.3,r*0.7), 0, 6.283);
+                        x.fillStyle = `rgba(150,110,240,${a*0.32})`; x.fill();
+                    }
+                }
+            }
+            // ponto de luz deslizando pelo cruzamento, com brilho respirando
+            const lx = W*(0.5 + 0.42*Math.sin(t*0.7));
+            const lu = lx/W;
+            const ly = baseY + Math.sin(lu*7.5 + t*1.6)*30 + Math.sin(lu*17 - t*2.3)*10;
+            const pulso = 0.55 + 0.45*Math.sin(t*4.5);
+            const flare = x.createRadialGradient(lx,ly,0,lx,ly,54);
+            flare.addColorStop(0, `rgba(240,215,255,${0.55*pulso*fade})`);
+            flare.addColorStop(0.35, `rgba(190,130,255,${0.22*pulso*fade})`);
+            flare.addColorStop(1, 'rgba(140,90,240,0)');
+            x.fillStyle = flare; x.beginPath(); x.arc(lx,ly,54,0,6.283); x.fill();
+
+            /* clareira atras do titulo: na referencia o pixel colado na letra e
+               quase preto (lum 6). O espectro passa por tras, mas apagado, senao
+               come o contorno da letra. */
+            const cl = x.createRadialGradient(W/2, H*0.15, 0, W/2, H*0.15, W*0.30);
+            cl.addColorStop(0, 'rgba(0,0,0,0.92)');
+            cl.addColorStop(0.5, 'rgba(0,0,0,0.62)');
+            cl.addColorStop(1, 'rgba(0,0,0,0)');
+            x.globalCompositeOperation = 'destination-out';
+            x.fillStyle = cl; x.fillRect(0,0,W,H);
+            x.globalCompositeOperation = 'source-over';
+
+            for (const p of parts){
+                p.x += p.vx; p.y += p.vy;
+                if (p.x<0) p.x=W; if (p.x>W) p.x=0;
+                if (p.y<0) p.y=H; if (p.y>H) p.y=0;
+                const cintila = p.a * (0.72 + 0.28*Math.sin(t*9 + p.f));
+                x.beginPath(); x.arc(p.x,p.y,p.r,0,6.283);
+                x.fillStyle = `rgba(214,182,255,${cintila})`; x.fill();
+            }
+            requestAnimationFrame(frame);
+        }
+        addEventListener('resize', size); size(); frame();
+    })();
+
+    /* Espectro reagindo ao audio de verdade. Tudo em try/catch e so conecta
+       no primeiro play: se qualquer coisa falhar, o audio continua tocando
+       normalmente e o fundo volta a animar sozinho. */
+    (function(){
+        const el = document.getElementById('audio-player');
+        if (!el || !window.AudioContext) return;
+        let ctx, analiser, dados, ligado = false, rafId = 0;
+        function medir(){
+            try{
+                analiser.getByteFrequencyData(dados);
+                let s = 0; for (let i=0;i<dados.length;i++) s += dados[i];
+                const nivel = (s/dados.length)/128;
+                if (window.celiaFxNivel) window.celiaFxNivel(nivel);
+            }catch(e){}
+            rafId = requestAnimationFrame(medir);
+        }
+        el.addEventListener('play', function(){
+            try{
+                if (!ligado){
+                    ctx = new AudioContext();
+                    const src = ctx.createMediaElementSource(el);
+                    analiser = ctx.createAnalyser();
+                    analiser.fftSize = 128;
+                    dados = new Uint8Array(analiser.frequencyBinCount);
+                    src.connect(analiser); analiser.connect(ctx.destination);
+                    ligado = true;
+                }
+                if (ctx.state === 'suspended') ctx.resume();
+                cancelAnimationFrame(rafId); medir();
+            }catch(e){ /* audio segue tocando; fundo anima sozinho */ }
+        });
+        const parar = function(){
+            cancelAnimationFrame(rafId);
+            if (window.celiaFxNivel) window.celiaFxNivel(0);
+        };
+        el.addEventListener('pause', parar);
+        el.addEventListener('ended', parar);
+    })();
+    </script>
+    <script>
+    const CHAT_API = 'http://127.0.0.1:8011';
+    async function chatLoadClis(){
+        const sel = document.getElementById('chat-cli');
+        const info = document.getElementById('chat-cli-info');
+        try{
+            const d = await (await fetch(`${CHAT_API}/brains`)).json();
+            sel.innerHTML = '';
+            const grupo = (rotulo, itens) => {
+                if (!itens.length) return;
+                const g = document.createElement('optgroup'); g.label = rotulo;
+                for (const c of itens){
+                    const o = document.createElement('option');
+                    o.value = c.id; o.textContent = c.label;
+                    o.disabled = !c.disponivel;
+                    if (c.id === d.default) o.selected = true;
+                    g.appendChild(o);
+                }
+                sel.appendChild(g);
+            };
+            grupo('CLI no PC', d.clis);
+            grupo(`9router — ${d.router.length} modelos`, d.router);
+            const nCli = d.clis.filter(c => c.disponivel).length;
+            info.textContent = `${d.total} cérebros: ${nCli} CLIs + ${d.router.length} modelos do 9router.`;
+        }catch(e){
+            sel.innerHTML = '<option>sidecar offline</option>';
+            info.innerHTML = '⚠️ Sidecar offline. Rode <code>python3 celia_chat.py</code>.';
+        }
+    }
+    function chatAdd(who, text, meta){
+        const log = document.getElementById('chat-log');
+        const cor = who === 'voce' ? 'var(--cyan)' : 'var(--pink)';
+        log.insertAdjacentHTML('beforeend',
+            `<div style="margin-bottom:1.1rem;">
+               <div style="color:${cor};font-weight:700;font-size:0.72rem;letter-spacing:1.5px;
+                    text-transform:uppercase;margin-bottom:0.3rem;">${who}${meta?` · ${meta}`:''}</div>
+               <div>${text.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</div>
+             </div>`);
+        log.scrollTop = log.scrollHeight;
+    }
+    async function chatSend(){
+        const cli = document.getElementById('chat-cli').value;
+        const ta  = document.getElementById('chat-prompt');
+        const btn = document.getElementById('chat-send');
+        const msg = ta.value.trim();
+        if (!msg || !cli) return;
+        chatAdd('voce', msg); ta.value = '';
+        btn.disabled = true; btn.innerHTML = '<span>⏳ Pensando…</span>';
+        try{
+            const r = await fetch(`${CHAT_API}/chat`, {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ brain: cli, prompt: msg })
+            });
+            const d = await r.json();
+            const nome = cli.replace(/^cli:/,'').replace(/^9r:/,'');
+            chatAdd(nome, d.text || d.error || '(vazio)', d.ms ? `${d.ms} ms` : '');
+        }catch(e){ chatAdd('erro', String(e)); }
+        finally{ btn.disabled = false; btn.innerHTML = '<span>💬 Enviar</span>'; }
+    }
+    document.addEventListener('DOMContentLoaded', chatLoadClis);
+    // Deep-link: #chat, #library, #fusion... abrem a aba direto.
+    document.addEventListener('DOMContentLoaded', () => {
+        const h = (location.hash || '').replace('#','');
+        if (h && document.getElementById('tab-' + h)) {
+            try { switchTab(h); } catch(e){}
+        }
+    });
+    </script>
+    <script>
+    const CFG_API = 'http://127.0.0.1:8011';
+    async function svcLoad(){
+        try{
+            const s = await (await fetch(`${CFG_API}/servicos`)).json();
+            document.getElementById('cfg-svc').innerHTML = s.servicos.map(x =>
+                `${x.ok ? '🟢' : '🔴'} <b>${x.nome}</b> <span style="color:var(--muted);font-size:.78rem;">${x.detalhe}</span>`
+            ).join('<br>');
+        }catch(e){
+            document.getElementById('cfg-svc').innerHTML =
+              '🔴 Sidecar offline. Rode <code>python3 celia_config.py</code>.';
+        }
+    }
+    document.addEventListener('DOMContentLoaded', svcLoad);
+    </script>
+</body>
+</html>

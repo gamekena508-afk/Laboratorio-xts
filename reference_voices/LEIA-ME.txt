@@ -1,0 +1,3 @@
+Esta pasta esta vazia de proposito.
+Nenhuma voz acompanha o projeto. Coloque aqui WAVs (fala limpa, 10 a 30 s)
+de vozes que voce tem direito de usar e clonar.

@@ -1,0 +1,68 @@
+# Voice Forge Studio (Célia Voice Lab / XTTS v2) - Requirements
+# ===============================================================
+# Versões extraídas de um ambiente em produção do autor
+# em 2026-08-12 (após correção do yt-dlp).
+# Para reproduzir o ambiente: python -m venv .venv && .venv/bin/pip install -r requirements.txt
+#
+# OBS: o build do torch abaixo assume CUDA 13.x (wheel cf130).
+# Se a sua CUDA for outra, ajuste a linha --extra-index-url adequadamente.
+
+# --- Core Framework ---
+fastapi==0.139.0
+uvicorn[standard]==0.51.0
+python-multipart==0.0.32
+pydantic==2.13.4
+
+# --- Audio Processing ---
+soundfile==0.14.0
+librosa==0.11.0
+numpy==1.26.4
+scipy==1.17.1
+audioread==3.1.0
+
+# --- Separação de áudio (voz vs. fundo musical) ---
+# ATENÇÃO: este pacote estava AUSENTE do venv em 2026-08-12 e causava
+# falha na rota /voices/download_yt com separate_audio=true e em
+# /creative/sample. Instale para habilitar a separação de stems.
+# Necessário PyTorch (já listado abaixo) para a variante [gpu].
+audio-separator[gpu]==0.21.2
+
+# --- TTS Engine ---
+TTS==0.22.0
+transformers==4.46.3
+
+# PyTorch (CUDA 13.0). Use a wheel compatível com a sua CUDA da máquina.
+--extra-index-url https://download.pytorch.org/whl/cu130
+torch==2.13.0
+torchaudio==2.11.0
+
+# --- Text Processing ---
+inflect==7.5.0
+gruut==2.2.3
+num2words==0.5.14
+unidecode==1.4.0
+
+# --- Download do YouTube ---
+# YouTube muda os endpoints/players com frequência. O canal nightly do yt-dlp
+# é recomendado pelo próprio projeto para acompanhar essas mudanças.
+# [default] instala yt-dlp-ejs (suporte completo ao YouTube) e curl-cffi
+# adiciona impersonação de navegador para reduzir falhas HTTP 403.
+yt-dlp[default,curl-cffi]>=2026.9.16.232951.dev0
+
+# ffmpeg-python (módulo) NÃO é usado pelo server.py — o servidor usa o
+# binário ffmpeg do sistema via subprocess. Mantenha o binário instalado:
+#   apt install ffmpeg
+# Deixe o pacote pip opcional/desativado para reduzir dépendencias desnecessárias.
+# ffmpeg-python==0.2.0  # opcional — removido pois não há import no projeto
+
+# --- VAD (Silero) ---
+# O server.py carrega o silero-vad via torch.hub.load('snakers4/silero-vad')
+# na primeira chamada — NÃO precisa do pacote pip silero-vad.
+# Requer conexão com a internet na primeira execução, OU baixar o repo
+# para ~/.cache/torch/hub/snakers4_silero-vad_master/
+# silero-vad==6.2.1  # não-instalar via pip; carregue via torch.hub
+
+# --- Utilities ---
+pyyaml==6.0.3
+python-dotenv==1.2.2
+tqdm==4.68.4

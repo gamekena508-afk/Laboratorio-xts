@@ -1,0 +1,13 @@
+# ambiente e caches
+.venv/
+__pycache__/
+*.pyc
+cache_embeddings/
+# saidas e dados gerados na sua maquina
+outputs/
+voice_database/
+# suas vozes e vetores de voz ficam so com voce
+reference_voices/*
+!reference_voices/LEIA-ME.txt
+*.pkl
+*.wav
